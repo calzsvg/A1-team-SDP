@@ -22,7 +22,7 @@ Java 17 이상 JDK가 필요합니다. 다음은 Ubuntu에서 저장소를 새�
 ```bash
 sudo apt update
 sudo apt install openjdk-17-jdk-headless git
-git clone -b a1/online-pvp https://github.com/calzsvg/A1-team-SDP.git
+git clone -b feat/online-pvp https://github.com/calzsvg/A1-team-SDP.git
 cd A1-team-SDP
 bash scripts/build-pvp.sh
 bash scripts/run-pvp-server.sh
