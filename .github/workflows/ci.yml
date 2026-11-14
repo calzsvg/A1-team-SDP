@@ -29,6 +29,8 @@ jobs:
         run: |
           javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpTest.java
           java -cp bin PvpTest
+          javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpLobbyFlowTest.java
+          java -Djava.awt.headless=true -cp bin:res PvpLobbyFlowTest
 
   # Runs the game for a few seconds on a virtual display and fails if it
   # throws. Compiling is not enough: a missing font made the game die on the
