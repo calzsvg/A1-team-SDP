@@ -8,8 +8,11 @@
    Full domain names, IPv4 addresses, `localhost`, and bracketed IPv6 addresses are supported.
    The default port is `7777`; for example, `example.test:8888` uses port `8888`.
 3. Enter a **Connection number** containing exactly three digits, including any leading zeroes.
-4. Click **Connect**. Your friend must enter the same server and connection number.
-5. Both players press **SPACE** to get ready. The match starts after three seconds.
+4. Click **Connect** to open the PvP lobby. Your friend must enter the same server and connection number.
+5. The lobby shows your ship at the bottom, your opponent at the top, and each player's readiness.
+   Press **SPACE** to toggle your own readiness. The countdown starts when both players are ready.
+6. The server starts the match after three seconds. The game switches to the match screen
+   without reconnecting or creating another room.
 
 The form starts empty. Opening the PvP menu does not connect to a bundled endpoint.
 No personal server address, automatic LAN fallback, or router configuration is included.
@@ -19,6 +22,16 @@ Click a field or use **Tab** / **Shift+Tab** to move focus. **Backspace**, **Ctr
 **Ctrl+V** support editing. Click **Connect** or press **Enter** to submit.
 Press **ESC** to return to the menu.
 After a connection failure or completed match, **R** reopens the form to edit the endpoint or number.
+The same shortcut is available in the lobby after connection failure or an opponent disconnection.
+
+## Screen flow
+
+`OnlinePvpScreen` owns the connection form and the lifetime of its `PvpClient`.
+After submission it opens the restored `PvpLobbyScreen`, preserving the original two-player panel layout.
+The lobby handles readiness and displays the server's countdown. It cannot move or fire the ships.
+Once the server reports that play has started, it hands the same client to `PvpMatchScreen`.
+The match screen handles movement, firing, and results. Returning to setup closes the previous
+connection before creating another; leaving PvP closes the connection as well.
 
 ## Gameplay
 
@@ -112,11 +125,15 @@ an integer from 0 to 999; the entry form preserves the three-digit representatio
 bash scripts/build-pvp.sh
 javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpTest.java
 java -cp bin PvpTest
+javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpLobbyFlowTest.java
+java -Djava.awt.headless=true -cp bin:res PvpLobbyFlowTest
 ```
 
 Tests cover endpoint validation, short names, leading zeroes, input directions, countdown,
 boundaries, collisions, wins, draws, malformed states, and real TCP clients using isolated rooms.
 They also cover full-room rejection, invalid room numbers, disconnection, and room-number reuse.
+The lobby flow test checks server readiness, countdown, socket preservation, and completing a match
+through the same client after the lobby-to-match transition.
 
 ## Limitations
 
