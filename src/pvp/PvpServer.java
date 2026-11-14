@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-/** Headless TCP server: pairs clients with the same three-digit code, up to 16 arenas. */
+/** Headless TCP server: pairs clients in arrival order, up to 16 arenas. */
 public final class PvpServer implements AutoCloseable {
     private final ServerSocket listener;
     private final List<Room> rooms = new ArrayList<Room>();
@@ -33,26 +33,17 @@ public final class PvpServer implements AutoCloseable {
                 DataInputStream in = new DataInputStream(socket.getInputStream());
                 if (in.readInt() != PvpProtocol.MAGIC || in.readInt() != PvpProtocol.VERSION)
                     throw new IOException("Protocol mismatch");
-                int roomCode = in.readInt();
-                if (roomCode < 0 || roomCode > 999) {
-                    reject(socket, PvpProtocol.INVALID_ROOM); continue;
-                }
                 socket.setSoTimeout(5000);
                 synchronized (rooms) {
                     Room waiting = null;
                     for (Iterator<Room> it = rooms.iterator(); it.hasNext();) {
                         Room room = it.next();
                         if (room.closed) it.remove();
-                        else if (room.code == roomCode) waiting = room;
-                    }
-                    if (waiting != null && !waiting.canJoin()) {
-                        reject(socket, PvpProtocol.ROOM_FULL); continue;
+                        else if (room.canJoin()) waiting = room;
                     }
                     if (waiting == null) {
-                        if (rooms.size() >= 16) {
-                            reject(socket, PvpProtocol.SERVER_FULL); continue;
-                        }
-                        waiting = new Room(roomCode); rooms.add(waiting);
+                        if (rooms.size() >= 16) throw new IOException("Server full");
+                        waiting = new Room(); rooms.add(waiting);
                     }
                     try { waiting.join(socket, in); }
                     catch (IOException e) {
@@ -62,12 +53,6 @@ public final class PvpServer implements AutoCloseable {
                 }
             } catch (IOException e) { socket.close(); }
         }
-    }
-
-    private static void reject(Socket socket, int reason) throws IOException {
-        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-        out.writeInt(PvpProtocol.MAGIC); out.writeInt(PvpProtocol.VERSION);
-        out.writeInt(reason); out.flush(); socket.close();
     }
 
     private static final class Peer {
@@ -81,7 +66,6 @@ public final class PvpServer implements AutoCloseable {
             this.socket = socket; this.in = in;
             out = new DataOutputStream(socket.getOutputStream());
             out.writeInt(PvpProtocol.MAGIC); out.writeInt(PvpProtocol.VERSION);
-            out.writeInt(PvpProtocol.OK);
             out.writeInt(player); out.flush();
         }
         void start() {
@@ -116,12 +100,10 @@ public final class PvpServer implements AutoCloseable {
     }
 
     private static final class Room implements Runnable {
-        private final int code;
         private final Peer[] peers = new Peer[2];
         private final PvpMatch match = new PvpMatch();
         private volatile boolean closed;
         private int count;
-        Room(int code) { this.code = code; }
         synchronized boolean canJoin() {
             return !closed && count == 1 && !peers[0].closed;
         }

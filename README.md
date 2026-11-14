@@ -35,7 +35,7 @@ Register your team by adding one row to the table below and submitting the chang
 
 ## Development
 
-- Online PvP / Ubuntu dedicated server: [Setup and gameplay guide](docs/online-pvp.md)
+- Online PvP / Ubuntu dedicated server: [한국어 실행 안내](docs/online-pvp.ko.md)
 
 - Recommended IDE: IntelliJ IDEA
 - Runtime requirement inherited from the upstream project: Java 7 or later

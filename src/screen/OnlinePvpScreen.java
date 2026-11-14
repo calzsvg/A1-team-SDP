@@ -2,60 +2,52 @@ package screen;
 
 import java.awt.Color;
 import java.awt.event.KeyEvent;
+import engine.DrawManager.SpriteType;
 import pvp.PvpClient;
 import pvp.PvpMatch;
 import pvp.PvpProtocol;
-import pvp.PvpConnectionSettings;
-import pvp.PvpConnectionForm;
+import pvp.PvpServerAddress;
 
 /** Each client controls one ship and always sees it at the bottom. */
 public final class OnlinePvpScreen extends Screen {
     private PvpClient client;
     private final Starfield stars;
     private boolean ready, readyWasDown, retryWasDown;
-    private PvpConnectionSettings settings;
-    private final PvpConnectionForm form = new PvpConnectionForm();
-    private boolean editing = true, mouseWasDown;
+    private String address;
+    private int port;
+    private String configError;
 
     public OnlinePvpScreen(int width, int height, int fps) {
         super(width, height, fps);
         returnCode = 1;
         stars = new Starfield(width, height);
+        address = PvpServerAddress.host();
+        try {
+            port = Integer.parseInt(System.getProperty("pvp.port", "7777"));
+            if (port < 1 || port > 65535 || address.length() == 0)
+                throw new NumberFormatException();
+        } catch (NumberFormatException e) { configError = "Invalid pvp.host / pvp.port setting"; }
         readyWasDown = inputManager.isKeyDown(KeyEvent.VK_SPACE);
     }
-    public void initialize() { inputManager.setTextInputEnabled(true); }
+    public void initialize() { connect(); }
     private void connect() {
-        PvpConnectionSettings chosen = form.submit();
-        if (chosen == null) return;
-        settings = chosen;
-        inputManager.setTextInputEnabled(false);
-        editing = false;
+        if (configError != null) return;
+        if (client != null) client.close();
         ready = false;
-        readyWasDown = inputManager.isKeyDown(KeyEvent.VK_SPACE);
-        client = new PvpClient(settings.host, settings.port, settings.roomCode);
-        inputDelay.reset();
+        client = new PvpClient(PvpServerAddress.candidates(), port);
     }
     public int run() {
         try { super.run(); return returnCode; }
-        finally {
-            inputManager.setTextInputEnabled(false);
-            if (client != null) client.close();
-        }
+        finally { if (client != null) client.close(); }
     }
     protected void update() {
-        if (editing) { updateForm(); stars.update(); draw(); return; }
         boolean space = inputManager.isKeyDown(KeyEvent.VK_SPACE);
         boolean retry = inputManager.isKeyDown(KeyEvent.VK_R);
         if (inputDelay.checkFinished()) {
             if (inputManager.isKeyDown(KeyEvent.VK_ESCAPE)) { isRunning = false; return; }
             if (retry && !retryWasDown && client != null
                     && (client.isClosed() || (client.getState() != null
-                    && client.getState().phase == PvpMatch.FINISHED))) {
-                client.close(); client = null; editing = true;
-                form.error = ""; form.focus(0);
-                inputManager.setTextInputEnabled(true);
-                stars.update(); draw(); return;
-            }
+                    && client.getState().phase == PvpMatch.FINISHED))) connect();
             if (space && !readyWasDown) ready = true;
         }
         readyWasDown = space; retryWasDown = retry;
@@ -70,88 +62,13 @@ public final class OnlinePvpScreen extends Screen {
         }
         stars.update(); draw();
     }
-
-    private void updateForm() {
-        String text;
-        while ((text = inputManager.pollTextInput()) != null) {
-            for (char ch : text.toCharArray()) {
-                if (ch == 27) { isRunning = false; return; }
-                if (ch == '\n') {
-                    if (inputDelay.checkFinished()) { connect(); if (!editing) return; }
-                }
-                else form.type(ch);
-            }
-        }
-        boolean mouse = inputManager.isLeftMousePressed();
-        if (mouse && !mouseWasDown && inputDelay.checkFinished()) {
-            int x = inputManager.getMouseX(), y = inputManager.getMouseY();
-            int left = (width - 336) / 2;
-            if (x >= left && x <= left + 336 && y >= 194 && y <= 232) form.focus(0);
-            else if (x >= left && x <= left + 144 && y >= 266 && y <= 306) form.focus(1);
-            else if (x >= left + 180 && x <= left + 336 && y >= 266 && y <= 306) {
-                form.focus(2); connect();
-            }
-        }
-        mouseWasDown = mouse;
-    }
-
-    private void drawForm() {
-        final int left = (width - 336) / 2;
-        final Color muted = new Color(130, 148, 140), panel = new Color(9, 19, 16);
-        drawManager.drawMenuRow(this, "ONLINE PVP", 105, true);
-        drawManager.drawSmallString("CONNECT WITH A FRIEND", left, 140, muted);
-        drawManager.drawSmallString("SERVER ADDRESS", left, 181, form.focus == 0 ? Color.GREEN : muted);
-        drawManager.fillBox(left, 194, 336, 38, panel);
-        drawManager.drawBox(left, 194, 336, 38, form.focus == 0 ? Color.GREEN : Color.DARK_GRAY);
-        String visible = form.address;
-        while (drawManager.getRegularStringWidth(visible + "_") > 312 && !visible.isEmpty())
-            visible = visible.substring(1);
-        if (form.selected && form.focus == 0)
-            drawManager.fillBox(left + 8, 200, 320, 25, new Color(26, 62, 40));
-        boolean blink = (System.currentTimeMillis() / 500) % 2 == 0;
-        drawManager.drawRegularString(visible.isEmpty() ? "name or IP:port" : visible,
-                left + 10, 220, visible.isEmpty() ? muted : Color.WHITE);
-        if (form.focus == 0 && blink)
-            drawManager.fillBox(left + 10 + (visible.isEmpty() ? 0 : drawManager.getRegularStringWidth(visible)),
-                    202, 2, 20, Color.GREEN);
-        drawManager.drawSmallString("CONNECTION NUMBER", left, 253, form.focus == 1 ? Color.GREEN : muted);
-        for (int i = 0; i < 3; i++) {
-            int bx = left + i * 50;
-            drawManager.fillBox(bx, 266, 42, 40, form.selected && form.focus == 1
-                    ? new Color(26, 62, 40) : panel);
-            drawManager.drawBox(bx, 266, 42, 40, form.focus == 1 ? Color.GREEN : Color.DARK_GRAY);
-            String digit = i < form.code.length() ? form.code.substring(i, i + 1)
-                    : form.focus == 1 && blink && i == form.code.length() ? "_" : "-";
-            drawManager.drawRegularString(digit, bx + 15, 293, i < form.code.length() ? Color.WHITE : muted);
-        }
-        drawManager.fillBox(left + 180, 266, 156, 40, form.focus == 2 ? new Color(18, 49, 27) : panel);
-        drawManager.drawBox(left + 180, 266, 156, 40, Color.GREEN);
-        String connectLabel = form.focus == 2 ? "> CONNECT <" : "CONNECT";
-        drawManager.drawRegularString(connectLabel, left + 258
-                - drawManager.getRegularStringWidth(connectLabel) / 2, 293, Color.GREEN);
-        drawManager.drawSmallString("USE THE SAME NUMBER AS YOUR FRIEND", left, 335, muted);
-        drawManager.drawSmallString("Room numbers are not passwords.", left, 353, muted);
-        if (!form.error.isEmpty()) {
-            String line = ""; int y = 386;
-            for (String word : form.error.split(" ")) {
-                if (drawManager.getSmallStringWidth(line + word) > 330) {
-                    drawManager.drawSmallString(line, left, y, Color.RED); y += 15; line = "";
-                }
-                line += word + " ";
-            }
-            drawManager.drawSmallString(line, left, y, Color.RED);
-        }
-        drawManager.drawSmallString("TAB switch  ENTER connect  ESC back", left, height - 32, muted);
-    }
     private void draw() {
         drawManager.initDrawing(this);
         drawManager.drawStarfield(this, stars);
-        if (editing) { drawForm(); drawManager.completeDrawing(this); return; }
         drawManager.drawSmallString("ONLINE PVP", 12, 18, Color.GREEN);
-        if (settings != null) drawManager.drawSmallString("ROOM " + settings.roomCode, 12, 34, Color.GRAY);
         PvpProtocol.State s = client == null ? null : client.getState();
         if (s == null) {
-            drawManager.drawMenuRow(this, client == null ? "Enter server and connection number" : client.getStatus(),
+            drawManager.drawMenuRow(this, configError != null ? configError : client.getStatus(),
                     height / 2, false, false);
         } else {
             int local = client.getPlayer();
@@ -181,7 +98,7 @@ public final class OnlinePvpScreen extends Screen {
             else if (s.phase == PvpMatch.COUNTDOWN) message = "Starting in " + (s.ticksLeft + 59) / 60;
             if (message != null) drawManager.drawMenuRow(this, message, height / 2, false, false);
         }
-        drawManager.drawSmallString("A/D move  SPACE fire/ready  R setup  ESC back",
+        drawManager.drawSmallString("A/D move  SPACE fire/ready  R rejoin  ESC back",
                 12, height - 32, Color.GRAY);
         drawManager.completeDrawing(this);
     }

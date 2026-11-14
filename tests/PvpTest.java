@@ -2,8 +2,7 @@ import pvp.PvpMatch;
 import pvp.PvpClient;
 import pvp.PvpProtocol;
 import pvp.PvpServer;
-import pvp.PvpConnectionSettings;
-import pvp.PvpConnectionForm;
+import pvp.PvpServerAddress;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -24,34 +23,17 @@ public final class PvpTest {
         check(condition.getAsBoolean(), message);
     }
     public static void main(String[] args) throws Exception {
-        PvpConnectionForm form = new PvpConnectionForm();
-        for (char ch : "lobby:8888\t0078x".toCharArray()) form.type(ch);
-        check(form.address.equals("lobby:8888") && form.code.equals("007"),
-                "In-game fields route text and limit codes to three digits");
-        form.type('\b'); form.type('9');
-        check(form.code.equals("009"), "Backspace edits the active field");
-        form.type('\u0001'); form.type('4');
-        check(form.code.equals("4"), "Select-all replaces field text");
-        check(form.submit() == null && !form.error.isEmpty(), "Invalid form displays an inline error");
-        form.type('5'); form.type('6');
-        check(form.submit().roomCode.equals("456") && form.error.isEmpty(), "Valid form can connect");
-        form.type('\t'); check(form.focus == 2, "Tab reaches connect button");
-        form.type('\u000b'); check(form.focus == 1, "Shift-tab moves focus back");
-        PvpConnectionSettings shortName = PvpConnectionSettings.parse("lobby", "007");
-        check(shortName.host.equals("lobby.duckdns.org") && shortName.port == 7777
-                && shortName.roomCode.equals("007"), "Short DuckDNS name and leading zeroes");
-        PvpConnectionSettings explicit = PvpConnectionSettings.parse("example.test:8888", "123");
-        check(explicit.host.equals("example.test") && explicit.port == 8888, "Explicit port");
-        check(PvpConnectionSettings.parse("localhost", "000").host.equals("localhost"), "Localhost unchanged");
-        check(PvpConnectionSettings.parse("[::1]:7777", "999").host.equals("::1"), "IPv6 endpoint");
-        for (String[] bad : new String[][] {{"", "123"}, {"example.test", "12"},
-                {"example.test", "12a"}, {"example.test:0", "123"},
-                {"example.test:65536", "123"}, {"example.test:", "123"},
-                {"https://example.test", "123"}, {"example.test/path", "123"}}) {
-            boolean invalidInput = false;
-            try { PvpConnectionSettings.parse(bad[0], bad[1]); }
-            catch (IllegalArgumentException expected) { invalidInput = true; }
-            check(invalidInput, "Invalid connection fields rejected");
+        String previousHost = System.getProperty("pvp.host");
+        try {
+            System.clearProperty("pvp.host");
+            check(PvpServerAddress.host().equals("riftflow.duckdns.org"), "Default DuckDNS host");
+            System.setProperty("pvp.host", "127.0.0.1");
+            String[] override = PvpServerAddress.candidates();
+            check(override.length == 1 && override[0].equals("127.0.0.1"),
+                    "Explicit host disables automatic LAN fallback");
+        } finally {
+            if (previousHost == null) System.clearProperty("pvp.host");
+            else System.setProperty("pvp.host", previousHost);
         }
         PvpMatch match = new PvpMatch();
         match.tick(PvpMatch.READY, 0);
@@ -103,32 +85,14 @@ public final class PvpTest {
             try { server.serve(); } catch (Throwable e) { failure[0] = e; }
         });
         thread.start();
-        PvpClient c0 = new PvpClient("127.0.0.1", server.getPort(), "007");
+        PvpClient c0 = new PvpClient(new String[] {"127.0.0.2", "127.0.0.1"}, server.getPort());
         PvpClient c1 = null;
-        PvpClient other = null;
         try {
-            await(() -> c0.getState() != null, "Explicit server connects");
+            await(() -> c0.getState() != null, "Unavailable endpoint falls back to valid server");
             check(c0.getPlayer() == 0 && c0.getState().players == 1, "First slot waits");
-            final PvpClient isolated = new PvpClient("127.0.0.1", server.getPort(), "008"); other = isolated;
-            await(() -> isolated.getState() != null, "Different code creates another room");
-            check(c0.getState().players == 1 && isolated.getState().players == 1,
-                    "Different room codes do not pair");
-            final PvpClient second = new PvpClient("127.0.0.1", server.getPort(), "007"); c1 = second;
+            final PvpClient second = new PvpClient("127.0.0.1", server.getPort()); c1 = second;
             await(() -> second.getState() != null && c0.getState().players == 2, "Clients paired");
             check(second.getPlayer() == 1, "Distinct second slot");
-            try (PvpClient excess = new PvpClient("127.0.0.1", server.getPort(), "007")) {
-                await(() -> excess.isClosed(), "Third client rejected from full room");
-                check(excess.getStatus().startsWith("Room full"), "Room full message is actionable");
-            }
-            try (java.net.Socket raw = new java.net.Socket("127.0.0.1", server.getPort())) {
-                raw.setSoTimeout(3000);
-                DataOutputStream out = new DataOutputStream(raw.getOutputStream());
-                out.writeInt(PvpProtocol.MAGIC); out.writeInt(PvpProtocol.VERSION);
-                out.writeInt(1000); out.flush();
-                DataInputStream in = new DataInputStream(raw.getInputStream());
-                check(in.readInt() == PvpProtocol.MAGIC && in.readInt() == PvpProtocol.VERSION
-                        && in.readInt() == PvpProtocol.INVALID_ROOM, "Server rejects invalid room number");
-            }
             c0.setInput(PvpMatch.READY); second.setInput(PvpMatch.READY);
             await(() -> second.getState().phase == PvpMatch.PLAYING, "Network ready/countdown");
             c0.setInput(PvpMatch.READY | PvpMatch.RIGHT);
@@ -137,16 +101,8 @@ public final class PvpTest {
                     "Two-client view-relative movement reaches opposite world edges");
             c0.close();
             await(() -> second.isClosed(), "Disconnect tears down room and informs opponent");
-            check(!isolated.isClosed() && isolated.getState().players == 1,
-                    "Closing one room leaves other rooms running");
-            try (PvpClient replacement = new PvpClient("127.0.0.1", server.getPort(), "007")) {
-                await(() -> replacement.getState() != null, "Closed room code can be reused");
-                check(replacement.getPlayer() == 0 && replacement.getState().players == 1,
-                        "Reused code starts a fresh room");
-            }
         } finally {
-            c0.close(); if (c1 != null) c1.close(); if (other != null) other.close();
-            server.close(); thread.join(3000);
+            c0.close(); if (c1 != null) c1.close(); server.close(); thread.join(3000);
         }
         check(!thread.isAlive() && failure[0] == null, "Server shuts down cleanly");
         System.out.println("PvP checks passed: " + checks);

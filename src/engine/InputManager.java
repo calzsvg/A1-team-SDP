@@ -31,44 +31,6 @@ public final class InputManager implements KeyListener, MouseMotionListener, Mou
 	private boolean isClick;
 	/** Whether the left mouse button is held down. */
 	private volatile boolean leftMousePressed;
-	/** Bounded text events, enabled only while an in-game form owns keyboard input. */
-	private final java.util.concurrent.ArrayBlockingQueue<String> textEvents =
-			new java.util.concurrent.ArrayBlockingQueue<String>(256);
-	private boolean textInputEnabled;
-	private final java.awt.KeyEventDispatcher textDispatcher = event -> {
-		if (event.getID() == KeyEvent.KEY_PRESSED) {
-			if (event.getKeyCode() == KeyEvent.VK_TAB)
-				textEvents.offer(event.isShiftDown() ? "\u000b" : "\t");
-			else if (event.getKeyCode() == KeyEvent.VK_ENTER) textEvents.offer("\n");
-			else if (event.getKeyCode() == KeyEvent.VK_ESCAPE) textEvents.offer("\u001b");
-			else if (event.isControlDown() && event.getKeyCode() == KeyEvent.VK_A)
-				textEvents.offer("\u0001");
-			else if (event.isControlDown() && event.getKeyCode() == KeyEvent.VK_V) {
-				try {
-					String text = (String) java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-							.getData(java.awt.datatransfer.DataFlavor.stringFlavor);
-					textEvents.offer(text.substring(0, Math.min(256, text.length()))
-							.replaceAll("[\\r\\n\\t\\x00-\\x1f]", ""));
-				} catch (Exception ignored) { }
-			}
-		} else if (event.getID() == KeyEvent.KEY_TYPED) {
-			char ch = event.getKeyChar();
-			if (ch == '\b' || (ch >= 32 && ch <= 126)) textEvents.offer(String.valueOf(ch));
-		}
-		return true;
-	};
-
-	public void setTextInputEnabled(boolean enabled) {
-		if (enabled == textInputEnabled) return;
-		textInputEnabled = enabled;
-		textEvents.clear();
-		java.util.Arrays.fill(keys, false);
-		java.awt.KeyboardFocusManager manager = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
-		if (enabled) manager.addKeyEventDispatcher(textDispatcher);
-		else manager.removeKeyEventDispatcher(textDispatcher);
-	}
-
-	public String pollTextInput() { return textEvents.poll(); }
 
 	/**
 	 * Private constructor.
