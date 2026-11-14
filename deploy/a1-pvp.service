@@ -1,0 +1,19 @@
+[Unit]
+Description=A1 Space Invaders PvP server
+After=network.target
+
+[Service]
+Type=simple
+User=a1pvp
+Group=a1pvp
+WorkingDirectory=/opt/a1-pvp
+ExecStart=/usr/bin/java -Xms32m -Xmx256m -cp bin pvp.PvpServer 7777 0.0.0.0
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -35,6 +35,8 @@ Register your team by adding one row to the table below and submitting the chang
 
 ## Development
 
+- Online PvP / Ubuntu dedicated server: [한국어 실행 안내](docs/online-pvp.ko.md)
+
 - Recommended IDE: IntelliJ IDEA
 - Runtime requirement inherited from the upstream project: Java 7 or later
 - Before implementing a feature, build and run the baseline game and analyze the relevant source code.

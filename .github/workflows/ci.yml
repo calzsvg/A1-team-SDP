@@ -25,6 +25,11 @@ jobs:
       - name: Check resources referenced by code exist
         run: test -f res/graphics && test -f res/scores
 
+      - name: PvP simulation and two-client TCP tests
+        run: |
+          javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpTest.java
+          java -cp bin PvpTest
+
   # Runs the game for a few seconds on a virtual display and fails if it
   # throws. Compiling is not enough: a missing font made the game die on the
   # first frame while the window stayed open, which looked like a white screen
