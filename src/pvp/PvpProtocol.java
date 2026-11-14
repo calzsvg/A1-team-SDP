@@ -6,7 +6,8 @@ import java.io.IOException;
 
 /** Small versioned binary protocol; never deserializes Java objects. */
 public final class PvpProtocol {
-    public static final int MAGIC = 0x41315056, VERSION = 1, DEFAULT_PORT = 7777;
+    public static final int MAGIC = 0x41315056, VERSION = 2, DEFAULT_PORT = 7777;
+    public static final int OK = 0, ROOM_FULL = 1, SERVER_FULL = 2, INVALID_ROOM = 3;
     private PvpProtocol() { }
 
     /** A fresh instance is published per packet, never mutated by the reader. */
