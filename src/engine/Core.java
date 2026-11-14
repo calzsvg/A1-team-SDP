@@ -12,12 +12,14 @@ import entity.Ship;
 import screen.AchievementsScreen;
 import screen.CashOutScreen;
 import screen.GameScreen;
+import screen.GameModesScreen;
 import screen.HighScoreScreen;
 import screen.OnlinePvpScreen;
 import screen.ScoreScreen;
 import screen.Screen;
 import screen.SettingsScreen;
 import screen.ShopScreen;
+import screen.SurvivalScreen;
 import screen.ShipSelectScreen;
 import screen.TitleScreen;
 import screen.TutorialScreen;
@@ -159,6 +161,8 @@ public final class Core {
 					currentScreen = new TutorialScreen(width, height, FPS);
 					returnCode = frame.setScreen(currentScreen);
 					if (returnCode != 2) {
+						if (returnCode == 1)
+							returnCode = 11;
 						break;
 					}
 				}
@@ -253,6 +257,17 @@ public final class Core {
 						+ " pvp lobby screen at " + FPS + " fps.");
 				returnCode = frame.setScreen(currentScreen);
 				LOGGER.info("Closing pvp lobby screen.");
+				if (returnCode == 1)
+					returnCode = 11;
+				break;
+			case 10:
+				// Survival gameplay will be added separately.
+				currentScreen = new SurvivalScreen(width, height, FPS);
+				returnCode = frame.setScreen(currentScreen);
+				break;
+			case 11:
+				currentScreen = new GameModesScreen(width, height, FPS);
+				returnCode = frame.setScreen(currentScreen);
 				break;
 			default:
 				// No screen for this code yet - back to the menu instead of

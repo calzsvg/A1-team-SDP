@@ -269,9 +269,6 @@ public class TitleScreen extends Screen {
 		}
 
 		// The title music only belongs to the menu, so stop it when a game starts.
-		if (this.selected == MenuItem.PLAY) {
-			SoundManager.getInstance().stopBgm();
-		}
 
 		lastSelected = this.selected;
 		this.returnCode = this.selected.getCode();

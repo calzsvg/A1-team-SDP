@@ -178,7 +178,7 @@ public class PvpLobbyScreen extends Screen {
 		drawManager.initDrawing(this);
 
 		drawManager.drawStarfield(this, this.starfield);
-		drawManager.drawScreenTitle(this, MenuItem.PVP.getTitle());
+		drawManager.drawScreenTitle(this, "PvP");
 
 		// Player 2 on top, Player 1 at the bottom, like in the match.
 		drawPlayerPanel("Player 2", "<- -> move, enter fire", "enter",
