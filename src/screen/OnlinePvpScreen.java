@@ -66,7 +66,6 @@ public final class OnlinePvpScreen extends Screen {
         drawManager.initDrawing(this);
         drawManager.drawStarfield(this, stars);
         drawManager.drawSmallString("ONLINE PVP", 12, 18, Color.GREEN);
-        drawManager.drawSmallString(address + ":" + port, 12, 34, Color.GRAY);
         PvpProtocol.State s = client == null ? null : client.getState();
         if (s == null) {
             drawManager.drawMenuRow(this, configError != null ? configError : client.getStatus(),
