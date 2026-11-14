@@ -35,6 +35,8 @@ Register your team by adding one row to the table below and submitting the chang
 
 ## Development
 
+- Survival mode: [Gameplay, controls and progression](docs/survival.md)
+
 - Online PvP / Ubuntu dedicated server: [Setup and gameplay guide](docs/online-pvp.md)
 
 - Recommended IDE: IntelliJ IDEA
