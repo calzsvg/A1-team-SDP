@@ -1989,4 +1989,14 @@ public final class DrawManager {
 			return new int[] { 0, 0 };
 		return new int[] { image.length, image[0].length };
 	}
+
+	/** Draw the PvP opponent with a true 180-degree sprite rotation. */
+	public void drawPvpShip(int x, int y, boolean rotated, Color color) {
+		Graphics2D g = (Graphics2D) backBufferGraphics;
+		java.awt.geom.AffineTransform previous = g.getTransform();
+		try {
+			if (rotated) g.rotate(Math.PI, x + 13, y + 8);
+			drawSprite(SpriteType.Ship, x, y, color);
+		} finally { g.setTransform(previous); }
+	}
 }

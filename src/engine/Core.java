@@ -13,7 +13,7 @@ import screen.AchievementsScreen;
 import screen.CashOutScreen;
 import screen.GameScreen;
 import screen.HighScoreScreen;
-import screen.PvpLobbyScreen;
+import screen.OnlinePvpScreen;
 import screen.ScoreScreen;
 import screen.Screen;
 import screen.SettingsScreen;
@@ -248,7 +248,7 @@ public final class Core {
 				break;
 			case 8:
 				// PvP lobby.
-				currentScreen = new PvpLobbyScreen(width, height, FPS);
+				currentScreen = new OnlinePvpScreen(width, height, FPS);
 				LOGGER.info("Starting " + WIDTH + "x" + HEIGHT
 						+ " pvp lobby screen at " + FPS + " fps.");
 				returnCode = frame.setScreen(currentScreen);
