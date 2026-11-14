@@ -14,10 +14,8 @@ package screen;
  */
 public enum MenuItem {
 
-	/** Starts the game. */
-	PLAY("Play", 2, true),
-	/** Local two-player match, starting with its lobby. */
-	PVP("PvP", 8, true),
+	/** Opens the Classic, PvP and Survival selection screen. */
+	PLAY("Play", 11, true),
 	/** Customize screen (ship selection). */
 	SHIP_SELECT("Customize", 7, true),
 	/** Shop screen. */
