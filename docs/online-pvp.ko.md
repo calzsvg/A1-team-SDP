@@ -3,6 +3,9 @@
 ## 구현된 동작
 
 - 각 PC에서 게임의 PvP 메뉴를 선택하면 지정한 TCP 서버에 접속합니다.
+- 기본 접속 주소는 `riftflow.duckdns.org:7777`입니다. 평소에는 주소 입력이 필요 없습니다.
+- DuckDNS 주소 연결 또는 프로토콜 확인에 실패하면 내부 주소 `172.30.1.48`을
+  시도합니다. 공유기 안에서 공인 주소로 되돌아오는 연결을 지원하지 않는 경우를 위한 대체 경로입니다.
 - 서버가 접속 순서대로 두 사람을 매칭합니다. 최대 16개 방(32명)입니다.
 - 두 사람이 SPACE로 준비하면 3초 카운트다운 후 대전합니다.
 - A/D 또는 좌우 화살표로 이동하고 SPACE를 누르고 있으면 연사합니다.
@@ -43,7 +46,7 @@ ss -ltn 'sport = :7777'
 Windows PowerShell (저장소 폴더에서):
 
 ```powershell
-.\scripts\run-pvp-client.ps1 -ServerAddress '서버주소' -Port 7777
+.\scripts\run-pvp-client.ps1
 ```
 
 스크립트 실행 정책으로 차단된다면 정책을 변경하지 않고 직접 실행할 수 있습니다.
@@ -52,20 +55,24 @@ Windows PowerShell (저장소 폴더에서):
 $sources = @(Get-ChildItem src -Recurse -Filter *.java | ForEach-Object FullName)
 New-Item -ItemType Directory -Force bin | Out-Null
 javac --release 17 -encoding UTF-8 -d bin @sources
-java '-Dpvp.host=서버주소' '-Dpvp.port=7777' -cp 'bin;res' engine.Core
+java -cp 'bin;res' engine.Core
 ```
 
 Linux/macOS:
 
 ```bash
 bash scripts/build-pvp.sh
-bash scripts/run-pvp-client.sh 서버주소 7777
+bash scripts/run-pvp-client.sh
 ```
 
-IDE 실행 시 VM options에 `-Dpvp.host=서버주소 -Dpvp.port=7777`을 넣습니다.
-프로그램 인수가 아니라 JVM 옵션입니다. Working directory는 저장소 최상위입니다.
-주소를 생략하면 `127.0.0.1`로 접속하므로 다른 PC에서는 반드시 서버 주소를 지정하세요.
-게임을 실행한 다음 PvP 메뉴로 들어갑니다.
+IDE에서도 별도 VM options 없이 `engine.Core`를 실행하고 PvP 메뉴를 선택하면 됩니다.
+Working directory는 저장소 최상위입니다. DuckDNS는 접속 주소를 제공하며 서버 실행은
+미니 PC에서 계속 이루어집니다. 기존 Riftflow 웹 서비스와 PvP는 다른 TCP 포트를 사용합니다.
+
+개발용 서버를 사용하고 싶을 때만 주소를 직접 지정합니다. PowerShell에서는
+`.\scripts\run-pvp-client.ps1 -ServerAddress '127.0.0.1' -Port 7777`, Linux/macOS에서는
+`bash scripts/run-pvp-client.sh 127.0.0.1 7777`을 사용합니다. IDE에서는 VM options로
+`-Dpvp.host=127.0.0.1 -Dpvp.port=7777`을 설정합니다. 직접 주소를 지정하면 LAN 자동 선택을 끕니다.
 
 먼저 같은 네트워크에서는 미니 PC의 내부 IP로 확인합니다. 같은 PC에서 게임을 두 개
 실행하는 테스트는 `127.0.0.1`로 할 수 있습니다. 서로 다른 집에서는 아래 외부 접속 설정 후

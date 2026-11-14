@@ -6,6 +6,7 @@ import engine.DrawManager.SpriteType;
 import pvp.PvpClient;
 import pvp.PvpMatch;
 import pvp.PvpProtocol;
+import pvp.PvpServerAddress;
 
 /** Each client controls one ship and always sees it at the bottom. */
 public final class OnlinePvpScreen extends Screen {
@@ -20,7 +21,7 @@ public final class OnlinePvpScreen extends Screen {
         super(width, height, fps);
         returnCode = 1;
         stars = new Starfield(width, height);
-        address = System.getProperty("pvp.host", "127.0.0.1").trim();
+        address = PvpServerAddress.host();
         try {
             port = Integer.parseInt(System.getProperty("pvp.port", "7777"));
             if (port < 1 || port > 65535 || address.length() == 0)
@@ -33,7 +34,7 @@ public final class OnlinePvpScreen extends Screen {
         if (configError != null) return;
         if (client != null) client.close();
         ready = false;
-        client = new PvpClient(address, port);
+        client = new PvpClient(PvpServerAddress.candidates(), port);
     }
     public int run() {
         try { super.run(); return returnCode; }

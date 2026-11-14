@@ -8,7 +8,7 @@ import java.net.Socket;
 
 /** Background network I/O keeps connect/read/write off the game thread. */
 public final class PvpClient implements AutoCloseable {
-    private final Socket socket = new Socket();
+    private volatile Socket socket;
     private volatile boolean closed;
     private volatile int input;
     private volatile int player;
@@ -16,20 +16,17 @@ public final class PvpClient implements AutoCloseable {
     private volatile String status = "Connecting...";
 
     public PvpClient(final String host, final int port) {
+        this(new String[] {host}, port);
+    }
+
+    public PvpClient(final String[] hosts, final int port) {
+        final String[] candidates = hosts.clone();
         Thread reader = new Thread(new Runnable() {
             public void run() {
                 try {
-                    socket.connect(new InetSocketAddress(host, port), 4000);
-                    if (closed) { socket.close(); return; }
-                    socket.setTcpNoDelay(true);
-                    socket.setSoTimeout(5000);
+                    DataInputStream in = connect(candidates, port);
+                    if (closed) return;
                     final DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                    DataInputStream in = new DataInputStream(socket.getInputStream());
-                    out.writeInt(PvpProtocol.MAGIC); out.writeInt(PvpProtocol.VERSION); out.flush();
-                    if (in.readInt() != PvpProtocol.MAGIC || in.readInt() != PvpProtocol.VERSION)
-                        throw new IOException("Server version mismatch");
-                    player = in.readInt();
-                    if (player < 0 || player > 1) throw new IOException("Invalid player slot");
                     status = "Connected";
                     Thread writer = new Thread(new Runnable() {
                         public void run() {
@@ -49,6 +46,32 @@ public final class PvpClient implements AutoCloseable {
         }, "pvp-state");
         reader.setDaemon(true); reader.start();
     }
+
+    /** Only select an endpoint after its handshake and first valid state. */
+    private DataInputStream connect(String[] hosts, int port) throws IOException {
+        for (String host : hosts) {
+            Socket attempt = new Socket();
+            synchronized (this) {
+                if (closed) { attempt.close(); throw new IOException("Closed"); }
+                socket = attempt;
+            }
+            try {
+                attempt.connect(new InetSocketAddress(host, port), 4000);
+                attempt.setTcpNoDelay(true); attempt.setSoTimeout(5000);
+                DataOutputStream out = new DataOutputStream(attempt.getOutputStream());
+                DataInputStream in = new DataInputStream(attempt.getInputStream());
+                out.writeInt(PvpProtocol.MAGIC); out.writeInt(PvpProtocol.VERSION); out.flush();
+                if (in.readInt() != PvpProtocol.MAGIC || in.readInt() != PvpProtocol.VERSION)
+                    throw new IOException("Server version mismatch");
+                player = in.readInt();
+                if (player < 0 || player > 1) throw new IOException("Invalid player slot");
+                state = PvpProtocol.read(in);
+                return in;
+            } catch (IOException e) { attempt.close(); }
+            catch (IllegalArgumentException e) { attempt.close(); }
+        }
+        throw new IOException("No available PvP endpoint");
+    }
     private void fail() {
         if (!closed) status = state == null ? "Connection failed / server unavailable"
                 : "Disconnected / opponent left";
@@ -59,8 +82,8 @@ public final class PvpClient implements AutoCloseable {
     public PvpProtocol.State getState() { return state; }
     public String getStatus() { return status; }
     public boolean isClosed() { return closed; }
-    public void close() {
+    public synchronized void close() {
         closed = true;
-        try { socket.close(); } catch (IOException ignored) { }
+        try { if (socket != null) socket.close(); } catch (IOException ignored) { }
     }
 }
