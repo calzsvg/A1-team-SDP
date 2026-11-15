@@ -326,6 +326,20 @@ public final class DrawManager {
 				frame.getInsets().top, frame);
 	}
 
+	/** Draws centered regular text with an explicit color. */
+	public void drawCenteredRegularString(final Screen screen,
+			final String string, final int height, final Color color) {
+		backBufferGraphics.setColor(color);
+		drawCenteredRegularString(screen, string, height);
+	}
+
+	/** Draws centered heading text with an explicit color. */
+	public void drawCenteredBigString(final Screen screen,
+			final String string, final int height, final Color color) {
+		backBufferGraphics.setColor(color);
+		drawCenteredBigString(screen, string, height);
+	}
+
 	/**
 	 * AUTHORED BY: VFX TEAM (Effection)
 	 *

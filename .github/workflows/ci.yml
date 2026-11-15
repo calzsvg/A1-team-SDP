@@ -25,6 +25,11 @@ jobs:
       - name: Check resources referenced by code exist
         run: test -f res/graphics && test -f res/scores
 
+      - name: Survival combat and progression tests
+        run: |
+          javac --release 17 -encoding UTF-8 -cp bin -d bin tests/SurvivalTest.java
+          java -cp bin SurvivalTest
+
       - name: PvP simulation and two-client TCP tests
         run: |
           javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpTest.java
@@ -58,6 +63,11 @@ jobs:
 
       - name: Install virtual display
         run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+      - name: Survival rendering and input smoke test
+        run: |
+          javac --release 17 -encoding UTF-8 -cp bin -d bin tests/SurvivalScreenTest.java
+          xvfb-run -a timeout 20 java -cp bin:res SurvivalScreenTest
 
       - name: Run the game for 10 seconds
         run: xvfb-run -a timeout 10 java -cp bin:res engine.Core > game.log 2>&1 || true

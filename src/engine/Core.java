@@ -261,7 +261,7 @@ public final class Core {
 					returnCode = 11;
 				break;
 			case 10:
-				// Survival gameplay will be added separately.
+				// Standalone auto-fire Survival run.
 				currentScreen = new SurvivalScreen(width, height, FPS);
 				returnCode = frame.setScreen(currentScreen);
 				break;
