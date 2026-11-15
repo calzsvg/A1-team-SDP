@@ -53,6 +53,27 @@ public final class SurvivalGame {
             this.width = width; this.height = height;
         }
     }
+    /** Special pickups dropped by enemies; each gives a short-lived effect (bomb is instant). */
+    public enum ItemType {
+        SHIELD("Shield", "5 s invulnerability", 5),
+        MAGNET("Magnet", "8 s pull all pickups", 8),
+        BOMB("Bomb", "Destroy normal enemies, hurt elites", 0),
+        DOUBLE_XP("Double XP", "15 s double XP", 15),
+        RAPID_FIRE("Rapid fire", "8 s faster auto fire", 8);
+        public final String title, description;
+        public final double seconds;
+        ItemType(String title, String description, double seconds) {
+            this.title = title; this.description = description; this.seconds = seconds;
+        }
+    }
+    public static final class Pickup {
+        public double x, y;
+        public final ItemType type;
+        public Pickup(double x, double y, ItemType type) { this.x = x; this.y = y; this.type = type; }
+    }
+    /** Chance that a normal kill also drops a special pickup. */
+    public static final double ITEM_DROP_CHANCE = .05;
+    public static final double BOMB_ELITE_DAMAGE = 100;
     public static final class Repair {
         public double x, y;
         Repair(double x, double y) { this.x = x; this.y = y; }
@@ -62,11 +83,14 @@ public final class SurvivalGame {
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<Shot> shots = new ArrayList<>();
     public final List<Repair> repairs = new ArrayList<>();
+    public final List<Pickup> pickups = new ArrayList<>();
     private final List<Upgrade> choices = new ArrayList<>();
     private final Random random;
     public double x, y, hp = 100, maxHp = 100, elapsed;
     public double damage = 12, fireInterval = .18, moveSpeed = 220;
     public double lifesteal, regeneration, hurtFlash;
+    /** Seconds left on each timed pickup effect. */
+    public double shield, magnet, doubleXp, rapid;
     public int level = 1, xp, kills, projectiles = 1;
     private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS;
     public SurvivalGame(int width, int height, Random random) {
@@ -126,6 +150,10 @@ public final class SurvivalGame {
         dt = Math.min(.05, dt);
         elapsed += dt;
         hurtFlash = Math.max(0, hurtFlash - dt);
+        shield = Math.max(0, shield - dt);
+        magnet = Math.max(0, magnet - dt);
+        doubleXp = Math.max(0, doubleXp - dt);
+        rapid = Math.max(0, rapid - dt);
         contactGrace = Math.max(0, contactGrace - dt);
         double length = Math.max(1, Math.hypot(dx, dy));
         x = Math.max(16, Math.min(width - 16, x + dx / length * moveSpeed * dt));
@@ -133,7 +161,7 @@ public final class SurvivalGame {
         heal(regeneration * dt);
         shotClock -= dt;
         if (shotClock <= 0) {
-            shotClock += fireInterval;
+            shotClock += rapid > 0 ? fireInterval * .6 : fireInterval;
             for (int i = 0; i < projectiles; i++) {
                 double offset = i - (projectiles - 1) / 2.0;
                 boolean big = shipType == ShipType.BIG_BULLET;
@@ -202,6 +230,11 @@ public final class SurvivalGame {
                 // Elites always drop a repair kit; everything else has a 12% chance.
                 if (enemy.kind == ELITE || random.nextDouble() < .12)
                     repairs.add(new Repair(enemy.x, enemy.y));
+                // Elites always drop a special pickup too; others rarely.
+                if (enemy.kind == ELITE || random.nextDouble() < ITEM_DROP_CHANCE) {
+                    ItemType[] types = ItemType.values();
+                    pickups.add(new Pickup(enemy.x, enemy.y, types[random.nextInt(types.length)]));
+                }
                 if (enemy.kind == SPLITTER) {
                     spawned.add(newEnemy(MINI, enemy.x - 12, enemy.y));
                     spawned.add(newEnemy(MINI, enemy.x + 12, enemy.y));
@@ -218,16 +251,45 @@ public final class SurvivalGame {
         for (Iterator<Repair> it = repairs.iterator(); it.hasNext();) {
             Repair repair = it.next(); repair.y += 45 * dt;
             double distance = Math.hypot(x - repair.x, y - repair.y);
-            if (distance < 90 && distance > 1) {
-                repair.x += (x - repair.x) / distance * 190 * dt;
-                repair.y += (y - repair.y) / distance * 190 * dt;
+            if ((distance < 90 || magnet > 0) && distance > 1) {
+                repair.x += (x - repair.x) / distance * (magnet > 0 ? 320 : 190) * dt;
+                repair.y += (y - repair.y) / distance * (magnet > 0 ? 320 : 190) * dt;
             }
             if (distance < 20) { heal(15); it.remove(); }
             else if (repair.y > height) it.remove();
         }
-        if (!isOver()) addExperience(earned);
+        for (Iterator<Pickup> it = pickups.iterator(); it.hasNext();) {
+            Pickup pickup = it.next(); pickup.y += 45 * dt;
+            double distance = Math.hypot(x - pickup.x, y - pickup.y);
+            if ((distance < 90 || magnet > 0) && distance > 1) {
+                pickup.x += (x - pickup.x) / distance * (magnet > 0 ? 320 : 190) * dt;
+                pickup.y += (y - pickup.y) / distance * (magnet > 0 ? 320 : 190) * dt;
+            }
+            if (distance < 20) { apply(pickup.type); it.remove(); }
+            else if (pickup.y > height) it.remove();
+        }
+        if (!isOver()) addExperience(doubleXp > 0 ? earned * 2 : earned);
     }
-    private void hurt(double amount) { hp = Math.max(0, hp - amount); hurtFlash = .18; }
+    /** Activates a pickup's effect. Timed effects refresh to their full duration. */
+    private void apply(ItemType type) {
+        switch (type) {
+        case SHIELD: shield = type.seconds; break;
+        case MAGNET: magnet = type.seconds; break;
+        case DOUBLE_XP: doubleXp = type.seconds; break;
+        case RAPID_FIRE: rapid = type.seconds; break;
+        case BOMB:
+            for (Enemy enemy : enemies) {
+                if (enemy.kind == ELITE) enemy.hp -= BOMB_ELITE_DAMAGE;
+                else enemy.hp = 0;
+            }
+            break;
+        default: break;
+        }
+    }
+    private void hurt(double amount) {
+        if (shield > 0) return;
+        hp = Math.max(0, hp - amount); hurtFlash = .18;
+    }
     private void heal(double amount) { if (!isOver()) hp = Math.min(maxHp, hp + amount); }
     public void addExperience(int amount) {
         if (amount < 0 || isOver()) return;

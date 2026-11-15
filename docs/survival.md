@@ -20,6 +20,7 @@ Choose **Play > Survival**. Survive as long as possible; upgrades reset each run
 - Leveling pauses combat and offers three different random upgrades. Press 1/2/3 or use up/down and Enter to choose.
 - Upgrades include damage, firing speed, multishot, maximum HP, movement speed, lifesteal, regeneration and immediate healing. Lifesteal heals a percentage of actual damage dealt, excluding overkill.
 - Enemies have a 12% chance to drop a green repair pickup restoring 15 HP. Nearby pickups move toward the ship. Healing cannot exceed maximum HP.
+- Special pickups (letter boxes) drop from kills (5% chance; elites always drop one): **S** shield (5 s invulnerable), **M** magnet (8 s, pulls every pickup toward the ship), **B** bomb (destroys normal enemies, deals 100 damage to elites), **X** double XP (15 s), **R** rapid fire (8 s, 40% faster fire). Active effects and their remaining seconds appear under the HUD.
 - P pauses/resumes. Escape returns to mode selection. At zero HP, view run results and press R to retry.
 
 Standalone checks (after compiling the game):

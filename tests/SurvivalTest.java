@@ -214,6 +214,56 @@ public final class SurvivalTest {
             for (Shot shot : game.shots) if (shot.hostile) volley++;
         }
         check(volley == 3, "Elites fire a three-way volley");
+        // Special pickups.
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.SHIELD));
+        game.update(.016, 0, 0);
+        check(game.pickups.isEmpty() && game.shield > 4.9, "Collecting a shield pickup starts the shield");
+        game.shots.add(new Shot(game.x, game.y, 0, 0, 10, true));
+        game.update(.016, 0, 0);
+        check(game.hp == 100, "Shield blocks enemy projectiles");
+        for (int i = 0; i < 120; i++) game.update(.05, 0, 0);
+        check(game.shield == 0, "Shield runs out after its duration");
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y - 300, SurvivalGame.ItemType.RAPID_FIRE));
+        game.magnet = 8;
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        check(game.pickups.isEmpty() && game.rapid > 0, "Magnet pulls distant pickups in");
+        game = game();
+        game.enemies.add(new Enemy(60, 200, 0, 1000, 0));
+        game.enemies.add(new Enemy(120, 200, 1, 1000, 0));
+        Enemy bossLike = new Enemy(200, 200, SurvivalGame.ELITE, 1000, 0);
+        game.enemies.add(bossLike);
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.BOMB));
+        game.update(.016, 0, 0);
+        game.update(.016, 0, 0);
+        check(game.kills == 2 && game.enemies.size() == 1 && bossLike.hp == 900,
+                "Bomb destroys normal enemies and only damages elites");
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.DOUBLE_XP));
+        game.update(.016, 0, 0);
+        game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.xp == 12, "Double XP doubles kill rewards");
+        SurvivalGame normal = game(), fast = game();
+        fast.pickups.add(new SurvivalGame.Pickup(fast.x, fast.y, SurvivalGame.ItemType.RAPID_FIRE));
+        for (int i = 0; i < 17; i++) { normal.update(.05, 0, 0); fast.update(.05, 0, 0); }
+        check(fast.shots.size() > normal.shots.size(), "Rapid fire pickup raises the fire rate");
+        game = new SurvivalGame(448, 520, new Random(5) {
+            @Override public double nextDouble() { return 0; }
+        });
+        game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.pickups.size() == 1, "Kills can drop a special pickup");
+        game = new SurvivalGame(448, 520, new Random(5) {
+            @Override public double nextDouble() { return .99; }
+        });
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.ELITE, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.pickups.size() == 1, "Elites always drop a special pickup");
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {

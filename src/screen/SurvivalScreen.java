@@ -104,6 +104,29 @@ public final class SurvivalScreen extends Screen {
         else
             drawManager.drawSprite(sprite, (int) enemy.x - 12, (int) enemy.y - 10, color);
     }
+    private void drawPickup(SurvivalGame.Pickup pickup) {
+        Color color; String letter;
+        switch (pickup.type) {
+        case SHIELD: color = new Color(90, 210, 230); letter = "S"; break;
+        case MAGNET: color = new Color(255, 235, 90); letter = "M"; break;
+        case BOMB: color = new Color(255, 70, 70); letter = "B"; break;
+        case DOUBLE_XP: color = new Color(230, 140, 65); letter = "X"; break;
+        default: color = Color.WHITE; letter = "R"; break;
+        }
+        int px = (int) pickup.x, py = (int) pickup.y;
+        drawManager.fillBox(px - 7, py - 7, 14, 14, Color.BLACK);
+        drawManager.drawBox(px - 7, py - 7, 14, 14, color);
+        drawManager.drawSmallString(letter, px - drawManager.getSmallStringWidth(letter) / 2, py + 4, color);
+    }
+    /** Remaining time of active pickup effects, shown under the HUD. */
+    private void drawBuffs() {
+        StringBuilder sb = new StringBuilder();
+        if (game.shield > 0) sb.append(String.format("SHIELD %.0f  ", game.shield));
+        if (game.magnet > 0) sb.append(String.format("MAGNET %.0f  ", game.magnet));
+        if (game.doubleXp > 0) sb.append(String.format("2X XP %.0f  ", game.doubleXp));
+        if (game.rapid > 0) sb.append(String.format("RAPID %.0f", game.rapid));
+        if (sb.length() > 0) drawManager.drawSmallString(sb.toString().trim(), 12, 99, Color.WHITE);
+    }
     private void draw() {
         // Classic's black playfield, white bullet sprites and green separators.
         for (SurvivalGame.Enemy enemy : game.enemies) {
@@ -122,10 +145,12 @@ public final class SurvivalScreen extends Screen {
             drawManager.fillBox((int) repair.x - 6, (int) repair.y - 2, 12, 4, Color.GREEN);
             drawManager.fillBox((int) repair.x - 2, (int) repair.y - 6, 4, 12, Color.GREEN);
         }
+        for (SurvivalGame.Pickup pickup : game.pickups) drawPickup(pickup);
         drawManager.drawSprite(shipSprite, (int) game.x - 13, (int) game.y - 8,
                 game.hurtFlash > 0 ? Color.WHITE : skin.colorAt(System.currentTimeMillis()));
         drawManager.drawHorizontalLine(this, height - 28);
         drawHud();
+        drawBuffs();
 
         if (game.isOver()) {
             panel(100, height - 170);
