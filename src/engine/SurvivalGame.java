@@ -23,6 +23,11 @@ public final class SurvivalGame {
             this.title = title; this.description = description;
         }
     }
+    /** Enemy kinds. 0-2 are the original types; the rest unlock as the run goes on. */
+    public static final int GRUNT = 0, ARMORED = 1, SHOOTER = 2, RUSHER = 3,
+            SPLITTER = 4, ELITE = 5, MINI = 6;
+    /** Seconds between difficulty tiers, and between elite arrivals. */
+    public static final double TIER_SECONDS = 30, ELITE_SECONDS = 60;
     public static final class Enemy {
         public double x, y, hp;
         public final double maxHp, speed;
@@ -63,7 +68,7 @@ public final class SurvivalGame {
     public double damage = 12, fireInterval = .18, moveSpeed = 220;
     public double lifesteal, regeneration, hurtFlash;
     public int level = 1, xp, kills, projectiles = 1;
-    private double spawnClock = .5, shotClock, contactGrace;
+    private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS;
     public SurvivalGame(int width, int height, Random random) {
         this(width, height, random, ShipType.STANDARD);
     }
@@ -82,6 +87,39 @@ public final class SurvivalGame {
     }
     public int xpRequired() { return 20 + (level - 1) * 12; }
     public boolean isOver() { return hp <= 0; }
+    /** Difficulty tier of the run: rises by one every {@link #TIER_SECONDS}. */
+    public int tier() { return (int) (elapsed / TIER_SECONDS); }
+    /** XP awarded for destroying the given enemy kind. */
+    public static int xpFor(int kind) {
+        switch (kind) {
+        case ARMORED: return 10;
+        case RUSHER: return 8;
+        case SPLITTER: return 12;
+        case ELITE: return 60;
+        case MINI: return 2;
+        default: return 6;
+        }
+    }
+    /** Which kinds can appear: the pool widens at 20 s, 45 s and 90 s. */
+    private int pickKind() {
+        if (elapsed < 20) return random.nextInt(2);
+        if (elapsed < 45) return random.nextInt(3);
+        if (elapsed < 90) return random.nextInt(4);
+        return random.nextInt(5);
+    }
+    private Enemy newEnemy(int kind, double x, double y) {
+        int tier = tier();
+        double hp, speed;
+        switch (kind) {
+        case ARMORED: hp = 30 + tier * 8; speed = 32 + Math.min(65, elapsed * .22); break;
+        case RUSHER: hp = 12 + tier * 5; speed = 95 + Math.min(60, elapsed * .2); break;
+        case SPLITTER: hp = 36 + tier * 8; speed = 40 + Math.min(40, elapsed * .15); break;
+        case ELITE: hp = 220 + tier * 60; speed = 26; break;
+        case MINI: hp = 8 + tier * 2; speed = 80; break;
+        default: hp = 18 + tier * 8; speed = 48 + Math.min(65, elapsed * .22); break;
+        }
+        return new Enemy(x, y, kind, hp, speed);
+    }
     public List<Upgrade> choices() { return Collections.unmodifiableList(choices); }
     public void update(double dt, double dx, double dy) {
         if (isOver() || !choices.isEmpty() || dt <= 0) return;
@@ -109,18 +147,31 @@ public final class SurvivalGame {
         spawnClock -= dt;
         if (spawnClock <= 0) {
             spawnClock += Math.max(.18, .85 - elapsed * .003);
-            int kind = random.nextInt(elapsed < 20 ? 2 : 3);
-            double health = (kind == 1 ? 30 : 18) + Math.floor(elapsed / 30) * 8;
-            enemies.add(new Enemy(20 + random.nextDouble() * (width - 40), -20,
-                    kind, health, (kind == 1 ? 32 : 48) + Math.min(65, elapsed * .22)));
+            int kind = pickKind();
+            enemies.add(newEnemy(kind, 20 + random.nextDouble() * (width - 40), -20));
+        }
+        if (elapsed >= nextElite) {
+            nextElite += ELITE_SECONDS;
+            enemies.add(newEnemy(ELITE, 40 + random.nextDouble() * (width - 80), -30));
         }
         for (Enemy enemy : enemies) {
             enemy.y += enemy.speed * dt;
-            if (enemy.kind == 2 && enemy.y > 80 && enemy.y < height - 100) {
+            if (enemy.kind == RUSHER) {
+                // Rushers slide toward the player's column while they fall.
+                double gap = x - enemy.x;
+                enemy.x += Math.max(-1, Math.min(1, gap / 20)) * 70 * dt;
+            }
+            boolean shoots = enemy.kind == SHOOTER || enemy.kind == ELITE;
+            if (shoots && enemy.y > 80 && enemy.y < height - 100) {
                 enemy.fireClock -= dt;
                 if (enemy.fireClock <= 0) {
-                    enemy.fireClock = 2.4;
+                    boolean elite = enemy.kind == ELITE;
+                    enemy.fireClock = elite ? 1.6 : 2.4;
                     shots.add(new Shot(enemy.x, enemy.y + 12, 0, 150, 10, true));
+                    if (elite) {
+                        shots.add(new Shot(enemy.x, enemy.y + 12, -60, 150, 10, true));
+                        shots.add(new Shot(enemy.x, enemy.y + 12, 60, 150, 10, true));
+                    }
                 }
             }
         }
@@ -143,11 +194,18 @@ public final class SurvivalGame {
             if (removed) it.remove();
         }
         int earned = 0;
+        List<Enemy> spawned = new ArrayList<>();
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy enemy = it.next();
             if (enemy.hp <= 0) {
-                kills++; earned += enemy.kind == 1 ? 10 : 6;
-                if (random.nextDouble() < .12) repairs.add(new Repair(enemy.x, enemy.y));
+                kills++; earned += xpFor(enemy.kind);
+                // Elites always drop a repair kit; everything else has a 12% chance.
+                if (enemy.kind == ELITE || random.nextDouble() < .12)
+                    repairs.add(new Repair(enemy.x, enemy.y));
+                if (enemy.kind == SPLITTER) {
+                    spawned.add(newEnemy(MINI, enemy.x - 12, enemy.y));
+                    spawned.add(newEnemy(MINI, enemy.x + 12, enemy.y));
+                }
                 it.remove();
             } else if (enemy.y >= height - 28) {
                 hurt(12); it.remove();
@@ -156,6 +214,7 @@ public final class SurvivalGame {
                 it.remove();
             }
         }
+        enemies.addAll(spawned);
         for (Iterator<Repair> it = repairs.iterator(); it.hasNext();) {
             Repair repair = it.next(); repair.y += 45 * dt;
             double distance = Math.hypot(x - repair.x, y - repair.y);

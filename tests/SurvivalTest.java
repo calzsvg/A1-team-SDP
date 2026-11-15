@@ -160,6 +160,60 @@ public final class SurvivalTest {
         check(game.hp == 0 && game.isOver(), "Zero HP ends the run");
         clock = game.elapsed; game.update(.05, 1, 0); game.addExperience(100);
         check(game.elapsed == clock && game.level == 1, "Game over freezes combat and progression");
+        // Enemy tiers and kinds.
+        game = game(); game.elapsed = 65;
+        check(game.tier() == 2, "Difficulty tier rises every 30 seconds");
+        check(SurvivalGame.xpFor(SurvivalGame.GRUNT) == 6 && SurvivalGame.xpFor(SurvivalGame.ARMORED) == 10
+                && SurvivalGame.xpFor(SurvivalGame.ELITE) == 60, "Tougher enemies are worth more XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        boolean[] early = new boolean[7];
+        for (int i = 0; i < 300; i++) {
+            game.update(.05, 0, 0);
+            for (Enemy e : game.enemies) early[e.kind] = true;
+        }
+        check(game.elapsed < 20 && early[0] && early[1] && !early[2] && !early[3] && !early[4] && !early[5],
+                "Only basic enemies appear during the first 20 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 100;
+        boolean[] late = new boolean[7];
+        for (int i = 0; i < 1000; i++) {
+            game.update(.05, 0, 0);
+            for (Enemy e : game.enemies) late[e.kind] = true;
+        }
+        check(late[SurvivalGame.RUSHER] && late[SurvivalGame.SPLITTER] && late[SurvivalGame.SHOOTER],
+                "Rushers and splitters join the run after 90 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 59.97;
+        game.update(.05, 0, 0);
+        boolean elite = false;
+        for (Enemy e : game.enemies) elite |= e.kind == SurvivalGame.ELITE;
+        check(elite, "An elite arrives at 60 seconds");
+        game = game();
+        Enemy rusher = new Enemy(game.x - 100, 150, SurvivalGame.RUSHER, 1000, 0);
+        game.enemies.add(rusher);
+        game.update(.05, 0, 0);
+        check(rusher.x > game.x - 100, "Rushers drift toward the player's column");
+        game = game();
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.SPLITTER, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        int minis = 0;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.MINI) minis++;
+        check(game.kills == 1 && minis == 2 && game.xp == 12, "Splitters break into two minis when destroyed");
+        game = new SurvivalGame(448, 520, new Random(3) {
+            @Override public double nextDouble() { return .99; }
+        });
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.ELITE, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.repairs.size() == 1 && game.xp == 40 && game.level == 2,
+                "Elites always drop a repair kit and grant 60 XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        game.enemies.add(new Enemy(224, 150, SurvivalGame.ELITE, 100000, 0));
+        int volley = 0;
+        for (int i = 0; i < 40 && volley == 0; i++) {
+            game.update(.05, 0, 0);
+            for (Shot shot : game.shots) if (shot.hostile) volley++;
+        }
+        check(volley == 3, "Elites fire a three-way volley");
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {

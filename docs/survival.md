@@ -14,6 +14,7 @@ Choose **Play > Survival**. Survive as long as possible; upgrades reset each run
 | Big Bullet | 220 | 0.24 s | Larger 20-damage shot with a wider hit area |
 
 - Enemies spawn above the screen and descend. Tougher enemies and shooters join the run; health, speed and spawn frequency grow over time.
+- Enemy kinds unlock over time: grunts and armored ships at the start, shooters after 20 s, rushers (fast, drift toward you) after 45 s, and splitters (break into two minis when destroyed) after 90 s. Every 60 s an elite arrives: a large, tough shooter with a three-way volley that always drops a repair kit and grants 60 XP. Difficulty tier rises every 30 s and adds to enemy health.
 - Start with 100 HP. Enemy bullets cost 10 HP, contact costs 18 HP, and each enemy crossing the bottom green line costs 12 HP. Escaping enemies grant no XP.
 - Kills immediately grant 6 XP (10 for armored enemies). The first level requires 20 XP; subsequent levels require 12 more each.
 - Leveling pauses combat and offers three different random upgrades. Press 1/2/3 or use up/down and Enter to choose.

@@ -85,16 +85,33 @@ public final class SurvivalScreen extends Screen {
         int filled = (int) ((w - 2) * Math.max(0, Math.min(1, ratio)));
         if (filled > 0) drawManager.fillBox(x + 1, y + 1, filled, 5, color);
     }
+    private void drawEnemy(SurvivalGame.Enemy enemy) {
+        SpriteType sprite;
+        Color color;
+        switch (enemy.kind) {
+        case SurvivalGame.ARMORED: sprite = SpriteType.EnemyShipB1; color = new Color(230, 140, 65); break;
+        case SurvivalGame.SHOOTER: sprite = SpriteType.EnemyShipC1; color = new Color(204, 120, 250); break;
+        case SurvivalGame.RUSHER: sprite = SpriteType.EnemyShipA2; color = new Color(255, 235, 90); break;
+        case SurvivalGame.SPLITTER: sprite = SpriteType.EnemyShipB2; color = new Color(90, 210, 230); break;
+        case SurvivalGame.MINI: sprite = SpriteType.EnemyShipA1; color = new Color(150, 230, 255); break;
+        case SurvivalGame.ELITE: sprite = SpriteType.EnemyShipC2; color = new Color(255, 70, 70); break;
+        default: sprite = SpriteType.EnemyShipA1; color = new Color(250, 92, 110); break;
+        }
+        if (enemy.kind == SurvivalGame.ELITE)
+            drawManager.drawSpriteScaled(sprite, (int) enemy.x - 18, (int) enemy.y - 12, 3, color);
+        else if (enemy.kind == SurvivalGame.MINI)
+            drawManager.drawSpriteScaled(sprite, (int) enemy.x - 8, (int) enemy.y - 6, 1, color);
+        else
+            drawManager.drawSprite(sprite, (int) enemy.x - 12, (int) enemy.y - 10, color);
+    }
     private void draw() {
         // Classic's black playfield, white bullet sprites and green separators.
         for (SurvivalGame.Enemy enemy : game.enemies) {
-            Color color = enemy.kind == 1 ? new Color(230, 140, 65)
-                    : enemy.kind == 2 ? new Color(204, 120, 250) : new Color(250, 92, 110);
-            drawManager.drawSprite(enemy.kind == 1 ? SpriteType.EnemyShipB1
-                    : enemy.kind == 2 ? SpriteType.EnemyShipC1 : SpriteType.EnemyShipA1,
-                    (int) enemy.x - 12, (int) enemy.y - 10, color);
-            if (enemy.hp < enemy.maxHp)
-                bar((int) enemy.x - 14, (int) enemy.y - 17, 28, enemy.hp / enemy.maxHp, Color.GREEN);
+            drawEnemy(enemy);
+            if (enemy.hp < enemy.maxHp) {
+                int half = enemy.kind == SurvivalGame.ELITE ? 20 : 14;
+                bar((int) enemy.x - half, (int) enemy.y - (half + 3), half * 2, enemy.hp / enemy.maxHp, Color.GREEN);
+            }
         }
         for (SurvivalGame.Shot shot : game.shots) {
             drawManager.drawSpriteScaled(shot.hostile ? SpriteType.EnemyBullet : SpriteType.Bullet,
