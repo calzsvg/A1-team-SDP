@@ -56,7 +56,7 @@ public final class SurvivalGame {
     /** Special pickups dropped by enemies; each gives a short-lived effect (bomb is instant). */
     public enum ItemType {
         SHIELD("Shield", "5 s invulnerability", 5),
-        MAGNET("Magnet", "8 s pull all pickups", 8),
+        MAGNET("Magnet", "8 s pull nearby pickups", 8),
         BOMB("Bomb", "Destroy normal enemies, hurt elites", 0),
         DOUBLE_XP("Double XP", "15 s double XP", 15),
         RAPID_FIRE("Rapid fire", "8 s faster auto fire", 8);
@@ -72,6 +72,8 @@ public final class SurvivalGame {
         public Pickup(double x, double y, ItemType type) { this.x = x; this.y = y; this.type = type; }
     }
     /** Chance that a normal kill also drops a special pickup. */
+    /** Pickups are pulled toward the ship only while a Magnet is active, within this radius and speed. */
+    public static final double MAGNET_RADIUS = 90, MAGNET_SPEED = 190;
     public static final double ITEM_DROP_CHANCE = .05;
     public static final double BOMB_ELITE_DAMAGE = 100;
     public static final class Repair {
@@ -109,7 +111,9 @@ public final class SurvivalGame {
         }
         x = width / 2.0; y = height - 75;
     }
-    public int xpRequired() { return 20 + (level - 1) * 12; }
+    /** XP needed for the next level: the first level costs XP_BASE, each later one XP_PER_LEVEL more. */
+    public static final int XP_BASE = 100, XP_PER_LEVEL = 35;
+    public int xpRequired() { return XP_BASE + (level - 1) * XP_PER_LEVEL; }
     public boolean isOver() { return hp <= 0; }
     /** Difficulty tier of the run: rises by one every {@link #TIER_SECONDS}. */
     public int tier() { return (int) (elapsed / TIER_SECONDS); }
@@ -251,9 +255,9 @@ public final class SurvivalGame {
         for (Iterator<Repair> it = repairs.iterator(); it.hasNext();) {
             Repair repair = it.next(); repair.y += 45 * dt;
             double distance = Math.hypot(x - repair.x, y - repair.y);
-            if ((distance < 90 || magnet > 0) && distance > 1) {
-                repair.x += (x - repair.x) / distance * (magnet > 0 ? 320 : 190) * dt;
-                repair.y += (y - repair.y) / distance * (magnet > 0 ? 320 : 190) * dt;
+            if (magnet > 0 && distance < MAGNET_RADIUS && distance > 1) {
+                repair.x += (x - repair.x) / distance * MAGNET_SPEED * dt;
+                repair.y += (y - repair.y) / distance * MAGNET_SPEED * dt;
             }
             if (distance < 20) { heal(15); it.remove(); }
             else if (repair.y > height) it.remove();
@@ -261,9 +265,9 @@ public final class SurvivalGame {
         for (Iterator<Pickup> it = pickups.iterator(); it.hasNext();) {
             Pickup pickup = it.next(); pickup.y += 45 * dt;
             double distance = Math.hypot(x - pickup.x, y - pickup.y);
-            if ((distance < 90 || magnet > 0) && distance > 1) {
-                pickup.x += (x - pickup.x) / distance * (magnet > 0 ? 320 : 190) * dt;
-                pickup.y += (y - pickup.y) / distance * (magnet > 0 ? 320 : 190) * dt;
+            if (magnet > 0 && distance < MAGNET_RADIUS && distance > 1) {
+                pickup.x += (x - pickup.x) / distance * MAGNET_SPEED * dt;
+                pickup.y += (y - pickup.y) / distance * MAGNET_SPEED * dt;
             }
             if (distance < 20) { apply(pickup.type); it.remove(); }
             else if (pickup.y > height) it.remove();

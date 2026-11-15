@@ -20,7 +20,7 @@ public final class SurvivalTest {
     private static SurvivalGame offering(Upgrade target, ShipType type) {
         for (int seed = 0; seed < 1000; seed++) {
             SurvivalGame game = new SurvivalGame(448, 520, new Random(seed), type);
-            game.addExperience(20);
+            game.addExperience(game.xpRequired());
             if (game.choices().contains(target)) return game;
         }
         throw new AssertionError("Upgrade never offered: " + target);
@@ -92,7 +92,7 @@ public final class SurvivalTest {
         game.shots.add(new Shot(60, 200, 0, 0, 12, false));
         game.update(.016, 0, 0);
         check(game.kills == 1 && game.xp == 6 && game.enemies.isEmpty(), "Kills award XP once");
-        game.addExperience(14);
+        game.addExperience(game.xpRequired() - 6);
         check(game.level == 2 && game.xp == 0 && game.choices().size() == 3,
                 "XP threshold opens three upgrade choices");
         check(new HashSet<>(game.choices()).size() == 3, "Upgrade offers have no duplicates");
@@ -103,7 +103,7 @@ public final class SurvivalTest {
         check(game.choices().size() == 3, "Invalid selection cannot consume a level");
         game.choose(0);
         check(game.choices().isEmpty(), "Choice resumes combat");
-        game = game(); game.addExperience(100);
+        game = game(); game.addExperience(100 + 135 + 170 + 4);
         game.choose(0); game.choose(0);
         check(game.level == 4 && game.xp == 4 && game.choices().size() == 3,
                 "Overflow XP preserves every pending level choice");
@@ -128,8 +128,9 @@ public final class SurvivalTest {
         game.shots.add(new Shot(game.x, game.y - 45, 0, 0, 12, false));
         game.update(.016, 0, 0);
         check(game.repairs.size() == 1, "A successful repair drop appears on a kill");
+        game.magnet = 8;
         for (int i = 0; i < 20; i++) game.update(.016, 0, 0);
-        check(game.hp == 65 && game.repairs.isEmpty(), "Nearby repair pickups attract and restore 15 HP");
+        check(game.hp == 65 && game.repairs.isEmpty(), "With a magnet, nearby repair pickups are pulled in and restore 15 HP");
         game = offering(Upgrade.MULTISHOT); select(game, Upgrade.MULTISHOT);
         game.update(.016, 0, 0);
         check(game.projectiles == 2 && game.shots.size() == 2, "Multishot fires additional projectiles");
@@ -204,7 +205,7 @@ public final class SurvivalTest {
         game.enemies.add(new Enemy(60, 200, SurvivalGame.ELITE, 5, 0));
         game.shots.add(new Shot(60, 200, 0, 0, 12, false));
         game.update(.016, 0, 0);
-        check(game.repairs.size() == 1 && game.xp == 40 && game.level == 2,
+        check(game.repairs.size() == 1 && game.xp == 60 && game.level == 1,
                 "Elites always drop a repair kit and grant 60 XP");
         game = game(); game.hp = game.maxHp = 100000;
         game.enemies.add(new Enemy(224, 150, SurvivalGame.ELITE, 100000, 0));
@@ -225,10 +226,20 @@ public final class SurvivalTest {
         for (int i = 0; i < 120; i++) game.update(.05, 0, 0);
         check(game.shield == 0, "Shield runs out after its duration");
         game = game();
-        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y - 300, SurvivalGame.ItemType.RAPID_FIRE));
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y - 80, SurvivalGame.ItemType.RAPID_FIRE));
         game.magnet = 8;
         for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
-        check(game.pickups.isEmpty() && game.rapid > 0, "Magnet pulls distant pickups in");
+        check(game.pickups.isEmpty() && game.rapid > 0, "Magnet pulls nearby pickups in");
+        game = game();
+        SurvivalGame.Pickup idle = new SurvivalGame.Pickup(game.x + 60, game.y - 60, SurvivalGame.ItemType.SHIELD);
+        game.pickups.add(idle);
+        game.update(.05, 0, 0);
+        check(idle.x == game.x + 60, "Pickups are not pulled in without a magnet");
+        game = game();
+        SurvivalGame.Pickup far = new SurvivalGame.Pickup(game.x + 150, game.y - 150, SurvivalGame.ItemType.SHIELD);
+        game.pickups.add(far); game.magnet = 8;
+        game.update(.05, 0, 0);
+        check(far.x == game.x + 150, "Magnet only reaches pickups within its radius");
         game = game();
         game.enemies.add(new Enemy(60, 200, 0, 1000, 0));
         game.enemies.add(new Enemy(120, 200, 1, 1000, 0));
@@ -264,6 +275,10 @@ public final class SurvivalTest {
         game.shots.add(new Shot(60, 200, 0, 0, 12, false));
         game.update(.016, 0, 0);
         check(game.pickups.size() == 1, "Elites always drop a special pickup");
+        game = new SurvivalGame(448, 520, new Random(7));
+        check(game.xpRequired() == 100, "First level needs 100 XP");
+        game.addExperience(100);
+        check(game.xpRequired() == 135 && game.level == 2, "Each level needs 35 more XP");
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {
