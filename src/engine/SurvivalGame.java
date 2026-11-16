@@ -94,6 +94,8 @@ public final class SurvivalGame {
     /** Seconds left on each timed pickup effect. */
     public double shield, magnet, doubleXp, rapid;
     public int level = 1, xp, kills, projectiles = 1;
+    /** Points earned from kills; see {@link #score()} for the run total. */
+    public int killScore;
     private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS;
     public SurvivalGame(int width, int height, Random random) {
         this(width, height, random, ShipType.STANDARD);
@@ -128,6 +130,24 @@ public final class SurvivalGame {
         default: return 6;
         }
     }
+    /** Score awarded for every full second survived. */
+    public static final int POINTS_PER_SECOND = 5;
+    /** Score awarded for destroying the given enemy kind. Escaping enemies score nothing. */
+    public static int pointsFor(int kind) {
+        switch (kind) {
+        case ARMORED: return 25;
+        case SHOOTER: return 15;
+        case RUSHER: return 15;
+        case SPLITTER: return 20;
+        case ELITE: return 100;
+        case MINI: return 5;
+        default: return 10;
+        }
+    }
+    /** Points earned from survival time: {@link #POINTS_PER_SECOND} per full second. */
+    public int timeScore() { return (int) elapsed * POINTS_PER_SECOND; }
+    /** Run score: kill points plus survival time points. */
+    public int score() { return killScore + timeScore(); }
     /** Which kinds can appear: the pool widens at 20 s, 45 s and 90 s. */
     private int pickKind() {
         if (elapsed < 20) return random.nextInt(2);
@@ -230,7 +250,7 @@ public final class SurvivalGame {
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy enemy = it.next();
             if (enemy.hp <= 0) {
-                kills++; earned += xpFor(enemy.kind);
+                kills++; earned += xpFor(enemy.kind); killScore += pointsFor(enemy.kind);
                 // Elites always drop a repair kit; everything else has a 12% chance.
                 if (enemy.kind == ELITE || random.nextDouble() < .12)
                     repairs.add(new Repair(enemy.x, enemy.y));
