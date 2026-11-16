@@ -20,7 +20,7 @@ public final class SurvivalTest {
     private static SurvivalGame offering(Upgrade target, ShipType type) {
         for (int seed = 0; seed < 1000; seed++) {
             SurvivalGame game = new SurvivalGame(448, 520, new Random(seed), type);
-            game.addExperience(20);
+            game.addExperience(game.xpRequired());
             if (game.choices().contains(target)) return game;
         }
         throw new AssertionError("Upgrade never offered: " + target);
@@ -92,7 +92,7 @@ public final class SurvivalTest {
         game.shots.add(new Shot(60, 200, 0, 0, 12, false));
         game.update(.016, 0, 0);
         check(game.kills == 1 && game.xp == 6 && game.enemies.isEmpty(), "Kills award XP once");
-        game.addExperience(14);
+        game.addExperience(game.xpRequired() - 6);
         check(game.level == 2 && game.xp == 0 && game.choices().size() == 3,
                 "XP threshold opens three upgrade choices");
         check(new HashSet<>(game.choices()).size() == 3, "Upgrade offers have no duplicates");
@@ -103,7 +103,7 @@ public final class SurvivalTest {
         check(game.choices().size() == 3, "Invalid selection cannot consume a level");
         game.choose(0);
         check(game.choices().isEmpty(), "Choice resumes combat");
-        game = game(); game.addExperience(100);
+        game = game(); game.addExperience(100 + 135 + 170 + 4);
         game.choose(0); game.choose(0);
         check(game.level == 4 && game.xp == 4 && game.choices().size() == 3,
                 "Overflow XP preserves every pending level choice");
@@ -128,8 +128,9 @@ public final class SurvivalTest {
         game.shots.add(new Shot(game.x, game.y - 45, 0, 0, 12, false));
         game.update(.016, 0, 0);
         check(game.repairs.size() == 1, "A successful repair drop appears on a kill");
+        game.magnet = 8;
         for (int i = 0; i < 20; i++) game.update(.016, 0, 0);
-        check(game.hp == 65 && game.repairs.isEmpty(), "Nearby repair pickups attract and restore 15 HP");
+        check(game.hp == 65 && game.repairs.isEmpty(), "With a magnet, nearby repair pickups are pulled in and restore 15 HP");
         game = offering(Upgrade.MULTISHOT); select(game, Upgrade.MULTISHOT);
         game.update(.016, 0, 0);
         check(game.projectiles == 2 && game.shots.size() == 2, "Multishot fires additional projectiles");
@@ -160,6 +161,124 @@ public final class SurvivalTest {
         check(game.hp == 0 && game.isOver(), "Zero HP ends the run");
         clock = game.elapsed; game.update(.05, 1, 0); game.addExperience(100);
         check(game.elapsed == clock && game.level == 1, "Game over freezes combat and progression");
+        // Enemy tiers and kinds.
+        game = game(); game.elapsed = 65;
+        check(game.tier() == 2, "Difficulty tier rises every 30 seconds");
+        check(SurvivalGame.xpFor(SurvivalGame.GRUNT) == 6 && SurvivalGame.xpFor(SurvivalGame.ARMORED) == 10
+                && SurvivalGame.xpFor(SurvivalGame.ELITE) == 60, "Tougher enemies are worth more XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        boolean[] early = new boolean[7];
+        for (int i = 0; i < 300; i++) {
+            game.update(.05, 0, 0);
+            for (Enemy e : game.enemies) early[e.kind] = true;
+        }
+        check(game.elapsed < 20 && early[0] && early[1] && !early[2] && !early[3] && !early[4] && !early[5],
+                "Only basic enemies appear during the first 20 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 100;
+        boolean[] late = new boolean[7];
+        for (int i = 0; i < 1000; i++) {
+            game.update(.05, 0, 0);
+            for (Enemy e : game.enemies) late[e.kind] = true;
+        }
+        check(late[SurvivalGame.RUSHER] && late[SurvivalGame.SPLITTER] && late[SurvivalGame.SHOOTER],
+                "Rushers and splitters join the run after 90 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 59.97;
+        game.update(.05, 0, 0);
+        boolean elite = false;
+        for (Enemy e : game.enemies) elite |= e.kind == SurvivalGame.ELITE;
+        check(elite, "An elite arrives at 60 seconds");
+        game = game();
+        Enemy rusher = new Enemy(game.x - 100, 150, SurvivalGame.RUSHER, 1000, 0);
+        game.enemies.add(rusher);
+        game.update(.05, 0, 0);
+        check(rusher.x > game.x - 100, "Rushers drift toward the player's column");
+        game = game();
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.SPLITTER, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        int minis = 0;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.MINI) minis++;
+        check(game.kills == 1 && minis == 2 && game.xp == 12, "Splitters break into two minis when destroyed");
+        game = new SurvivalGame(448, 520, new Random(3) {
+            @Override public double nextDouble() { return .99; }
+        });
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.ELITE, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.repairs.size() == 1 && game.xp == 60 && game.level == 1,
+                "Elites always drop a repair kit and grant 60 XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        game.enemies.add(new Enemy(224, 150, SurvivalGame.ELITE, 100000, 0));
+        int volley = 0;
+        for (int i = 0; i < 40 && volley == 0; i++) {
+            game.update(.05, 0, 0);
+            for (Shot shot : game.shots) if (shot.hostile) volley++;
+        }
+        check(volley == 3, "Elites fire a three-way volley");
+        // Special pickups.
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.SHIELD));
+        game.update(.016, 0, 0);
+        check(game.pickups.isEmpty() && game.shield > 4.9, "Collecting a shield pickup starts the shield");
+        game.shots.add(new Shot(game.x, game.y, 0, 0, 10, true));
+        game.update(.016, 0, 0);
+        check(game.hp == 100, "Shield blocks enemy projectiles");
+        for (int i = 0; i < 120; i++) game.update(.05, 0, 0);
+        check(game.shield == 0, "Shield runs out after its duration");
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y - 80, SurvivalGame.ItemType.RAPID_FIRE));
+        game.magnet = 8;
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        check(game.pickups.isEmpty() && game.rapid > 0, "Magnet pulls nearby pickups in");
+        game = game();
+        SurvivalGame.Pickup idle = new SurvivalGame.Pickup(game.x + 60, game.y - 60, SurvivalGame.ItemType.SHIELD);
+        game.pickups.add(idle);
+        game.update(.05, 0, 0);
+        check(idle.x == game.x + 60, "Pickups are not pulled in without a magnet");
+        game = game();
+        SurvivalGame.Pickup far = new SurvivalGame.Pickup(game.x + 150, game.y - 150, SurvivalGame.ItemType.SHIELD);
+        game.pickups.add(far); game.magnet = 8;
+        game.update(.05, 0, 0);
+        check(far.x == game.x + 150, "Magnet only reaches pickups within its radius");
+        game = game();
+        game.enemies.add(new Enemy(60, 200, 0, 1000, 0));
+        game.enemies.add(new Enemy(120, 200, 1, 1000, 0));
+        Enemy bossLike = new Enemy(200, 200, SurvivalGame.ELITE, 1000, 0);
+        game.enemies.add(bossLike);
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.BOMB));
+        game.update(.016, 0, 0);
+        game.update(.016, 0, 0);
+        check(game.kills == 2 && game.enemies.size() == 1 && bossLike.hp == 900,
+                "Bomb destroys normal enemies and only damages elites");
+        game = game();
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.DOUBLE_XP));
+        game.update(.016, 0, 0);
+        game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.xp == 12, "Double XP doubles kill rewards");
+        SurvivalGame normal = game(), fast = game();
+        fast.pickups.add(new SurvivalGame.Pickup(fast.x, fast.y, SurvivalGame.ItemType.RAPID_FIRE));
+        for (int i = 0; i < 17; i++) { normal.update(.05, 0, 0); fast.update(.05, 0, 0); }
+        check(fast.shots.size() > normal.shots.size(), "Rapid fire pickup raises the fire rate");
+        game = new SurvivalGame(448, 520, new Random(5) {
+            @Override public double nextDouble() { return 0; }
+        });
+        game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.pickups.size() == 1, "Kills can drop a special pickup");
+        game = new SurvivalGame(448, 520, new Random(5) {
+            @Override public double nextDouble() { return .99; }
+        });
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.ELITE, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.pickups.size() == 1, "Elites always drop a special pickup");
+        game = new SurvivalGame(448, 520, new Random(7));
+        check(game.xpRequired() == 100, "First level needs 100 XP");
+        game.addExperience(100);
+        check(game.xpRequired() == 135 && game.level == 2, "Each level needs 35 more XP");
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {

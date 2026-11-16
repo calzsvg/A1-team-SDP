@@ -23,6 +23,11 @@ public final class SurvivalGame {
             this.title = title; this.description = description;
         }
     }
+    /** Enemy kinds. 0-2 are the original types; the rest unlock as the run goes on. */
+    public static final int GRUNT = 0, ARMORED = 1, SHOOTER = 2, RUSHER = 3,
+            SPLITTER = 4, ELITE = 5, MINI = 6;
+    /** Seconds between difficulty tiers, and between elite arrivals. */
+    public static final double TIER_SECONDS = 30, ELITE_SECONDS = 60;
     public static final class Enemy {
         public double x, y, hp;
         public final double maxHp, speed;
@@ -48,6 +53,29 @@ public final class SurvivalGame {
             this.width = width; this.height = height;
         }
     }
+    /** Special pickups dropped by enemies; each gives a short-lived effect (bomb is instant). */
+    public enum ItemType {
+        SHIELD("Shield", "5 s invulnerability", 5),
+        MAGNET("Magnet", "8 s pull nearby pickups", 8),
+        BOMB("Bomb", "Destroy normal enemies, hurt elites", 0),
+        DOUBLE_XP("Double XP", "15 s double XP", 15),
+        RAPID_FIRE("Rapid fire", "8 s faster auto fire", 8);
+        public final String title, description;
+        public final double seconds;
+        ItemType(String title, String description, double seconds) {
+            this.title = title; this.description = description; this.seconds = seconds;
+        }
+    }
+    public static final class Pickup {
+        public double x, y;
+        public final ItemType type;
+        public Pickup(double x, double y, ItemType type) { this.x = x; this.y = y; this.type = type; }
+    }
+    /** Chance that a normal kill also drops a special pickup. */
+    /** Pickups are pulled toward the ship only while a Magnet is active, within this radius and speed. */
+    public static final double MAGNET_RADIUS = 90, MAGNET_SPEED = 190;
+    public static final double ITEM_DROP_CHANCE = .05;
+    public static final double BOMB_ELITE_DAMAGE = 100;
     public static final class Repair {
         public double x, y;
         Repair(double x, double y) { this.x = x; this.y = y; }
@@ -57,13 +85,16 @@ public final class SurvivalGame {
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<Shot> shots = new ArrayList<>();
     public final List<Repair> repairs = new ArrayList<>();
+    public final List<Pickup> pickups = new ArrayList<>();
     private final List<Upgrade> choices = new ArrayList<>();
     private final Random random;
     public double x, y, hp = 100, maxHp = 100, elapsed;
     public double damage = 12, fireInterval = .18, moveSpeed = 220;
     public double lifesteal, regeneration, hurtFlash;
+    /** Seconds left on each timed pickup effect. */
+    public double shield, magnet, doubleXp, rapid;
     public int level = 1, xp, kills, projectiles = 1;
-    private double spawnClock = .5, shotClock, contactGrace;
+    private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS;
     public SurvivalGame(int width, int height, Random random) {
         this(width, height, random, ShipType.STANDARD);
     }
@@ -80,14 +111,53 @@ public final class SurvivalGame {
         }
         x = width / 2.0; y = height - 75;
     }
-    public int xpRequired() { return 20 + (level - 1) * 12; }
+    /** XP needed for the next level: the first level costs XP_BASE, each later one XP_PER_LEVEL more. */
+    public static final int XP_BASE = 100, XP_PER_LEVEL = 35;
+    public int xpRequired() { return XP_BASE + (level - 1) * XP_PER_LEVEL; }
     public boolean isOver() { return hp <= 0; }
+    /** Difficulty tier of the run: rises by one every {@link #TIER_SECONDS}. */
+    public int tier() { return (int) (elapsed / TIER_SECONDS); }
+    /** XP awarded for destroying the given enemy kind. */
+    public static int xpFor(int kind) {
+        switch (kind) {
+        case ARMORED: return 10;
+        case RUSHER: return 8;
+        case SPLITTER: return 12;
+        case ELITE: return 60;
+        case MINI: return 2;
+        default: return 6;
+        }
+    }
+    /** Which kinds can appear: the pool widens at 20 s, 45 s and 90 s. */
+    private int pickKind() {
+        if (elapsed < 20) return random.nextInt(2);
+        if (elapsed < 45) return random.nextInt(3);
+        if (elapsed < 90) return random.nextInt(4);
+        return random.nextInt(5);
+    }
+    private Enemy newEnemy(int kind, double x, double y) {
+        int tier = tier();
+        double hp, speed;
+        switch (kind) {
+        case ARMORED: hp = 30 + tier * 8; speed = 32 + Math.min(65, elapsed * .22); break;
+        case RUSHER: hp = 12 + tier * 5; speed = 95 + Math.min(60, elapsed * .2); break;
+        case SPLITTER: hp = 36 + tier * 8; speed = 40 + Math.min(40, elapsed * .15); break;
+        case ELITE: hp = 220 + tier * 60; speed = 26; break;
+        case MINI: hp = 8 + tier * 2; speed = 80; break;
+        default: hp = 18 + tier * 8; speed = 48 + Math.min(65, elapsed * .22); break;
+        }
+        return new Enemy(x, y, kind, hp, speed);
+    }
     public List<Upgrade> choices() { return Collections.unmodifiableList(choices); }
     public void update(double dt, double dx, double dy) {
         if (isOver() || !choices.isEmpty() || dt <= 0) return;
         dt = Math.min(.05, dt);
         elapsed += dt;
         hurtFlash = Math.max(0, hurtFlash - dt);
+        shield = Math.max(0, shield - dt);
+        magnet = Math.max(0, magnet - dt);
+        doubleXp = Math.max(0, doubleXp - dt);
+        rapid = Math.max(0, rapid - dt);
         contactGrace = Math.max(0, contactGrace - dt);
         double length = Math.max(1, Math.hypot(dx, dy));
         x = Math.max(16, Math.min(width - 16, x + dx / length * moveSpeed * dt));
@@ -95,7 +165,7 @@ public final class SurvivalGame {
         heal(regeneration * dt);
         shotClock -= dt;
         if (shotClock <= 0) {
-            shotClock += fireInterval;
+            shotClock += rapid > 0 ? fireInterval * .6 : fireInterval;
             for (int i = 0; i < projectiles; i++) {
                 double offset = i - (projectiles - 1) / 2.0;
                 boolean big = shipType == ShipType.BIG_BULLET;
@@ -109,18 +179,31 @@ public final class SurvivalGame {
         spawnClock -= dt;
         if (spawnClock <= 0) {
             spawnClock += Math.max(.18, .85 - elapsed * .003);
-            int kind = random.nextInt(elapsed < 20 ? 2 : 3);
-            double health = (kind == 1 ? 30 : 18) + Math.floor(elapsed / 30) * 8;
-            enemies.add(new Enemy(20 + random.nextDouble() * (width - 40), -20,
-                    kind, health, (kind == 1 ? 32 : 48) + Math.min(65, elapsed * .22)));
+            int kind = pickKind();
+            enemies.add(newEnemy(kind, 20 + random.nextDouble() * (width - 40), -20));
+        }
+        if (elapsed >= nextElite) {
+            nextElite += ELITE_SECONDS;
+            enemies.add(newEnemy(ELITE, 40 + random.nextDouble() * (width - 80), -30));
         }
         for (Enemy enemy : enemies) {
             enemy.y += enemy.speed * dt;
-            if (enemy.kind == 2 && enemy.y > 80 && enemy.y < height - 100) {
+            if (enemy.kind == RUSHER) {
+                // Rushers slide toward the player's column while they fall.
+                double gap = x - enemy.x;
+                enemy.x += Math.max(-1, Math.min(1, gap / 20)) * 70 * dt;
+            }
+            boolean shoots = enemy.kind == SHOOTER || enemy.kind == ELITE;
+            if (shoots && enemy.y > 80 && enemy.y < height - 100) {
                 enemy.fireClock -= dt;
                 if (enemy.fireClock <= 0) {
-                    enemy.fireClock = 2.4;
+                    boolean elite = enemy.kind == ELITE;
+                    enemy.fireClock = elite ? 1.6 : 2.4;
                     shots.add(new Shot(enemy.x, enemy.y + 12, 0, 150, 10, true));
+                    if (elite) {
+                        shots.add(new Shot(enemy.x, enemy.y + 12, -60, 150, 10, true));
+                        shots.add(new Shot(enemy.x, enemy.y + 12, 60, 150, 10, true));
+                    }
                 }
             }
         }
@@ -143,11 +226,23 @@ public final class SurvivalGame {
             if (removed) it.remove();
         }
         int earned = 0;
+        List<Enemy> spawned = new ArrayList<>();
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy enemy = it.next();
             if (enemy.hp <= 0) {
-                kills++; earned += enemy.kind == 1 ? 10 : 6;
-                if (random.nextDouble() < .12) repairs.add(new Repair(enemy.x, enemy.y));
+                kills++; earned += xpFor(enemy.kind);
+                // Elites always drop a repair kit; everything else has a 12% chance.
+                if (enemy.kind == ELITE || random.nextDouble() < .12)
+                    repairs.add(new Repair(enemy.x, enemy.y));
+                // Elites always drop a special pickup too; others rarely.
+                if (enemy.kind == ELITE || random.nextDouble() < ITEM_DROP_CHANCE) {
+                    ItemType[] types = ItemType.values();
+                    pickups.add(new Pickup(enemy.x, enemy.y, types[random.nextInt(types.length)]));
+                }
+                if (enemy.kind == SPLITTER) {
+                    spawned.add(newEnemy(MINI, enemy.x - 12, enemy.y));
+                    spawned.add(newEnemy(MINI, enemy.x + 12, enemy.y));
+                }
                 it.remove();
             } else if (enemy.y >= height - 28) {
                 hurt(12); it.remove();
@@ -156,19 +251,49 @@ public final class SurvivalGame {
                 it.remove();
             }
         }
+        enemies.addAll(spawned);
         for (Iterator<Repair> it = repairs.iterator(); it.hasNext();) {
             Repair repair = it.next(); repair.y += 45 * dt;
             double distance = Math.hypot(x - repair.x, y - repair.y);
-            if (distance < 90 && distance > 1) {
-                repair.x += (x - repair.x) / distance * 190 * dt;
-                repair.y += (y - repair.y) / distance * 190 * dt;
+            if (magnet > 0 && distance < MAGNET_RADIUS && distance > 1) {
+                repair.x += (x - repair.x) / distance * MAGNET_SPEED * dt;
+                repair.y += (y - repair.y) / distance * MAGNET_SPEED * dt;
             }
             if (distance < 20) { heal(15); it.remove(); }
             else if (repair.y > height) it.remove();
         }
-        if (!isOver()) addExperience(earned);
+        for (Iterator<Pickup> it = pickups.iterator(); it.hasNext();) {
+            Pickup pickup = it.next(); pickup.y += 45 * dt;
+            double distance = Math.hypot(x - pickup.x, y - pickup.y);
+            if (magnet > 0 && distance < MAGNET_RADIUS && distance > 1) {
+                pickup.x += (x - pickup.x) / distance * MAGNET_SPEED * dt;
+                pickup.y += (y - pickup.y) / distance * MAGNET_SPEED * dt;
+            }
+            if (distance < 20) { apply(pickup.type); it.remove(); }
+            else if (pickup.y > height) it.remove();
+        }
+        if (!isOver()) addExperience(doubleXp > 0 ? earned * 2 : earned);
     }
-    private void hurt(double amount) { hp = Math.max(0, hp - amount); hurtFlash = .18; }
+    /** Activates a pickup's effect. Timed effects refresh to their full duration. */
+    private void apply(ItemType type) {
+        switch (type) {
+        case SHIELD: shield = type.seconds; break;
+        case MAGNET: magnet = type.seconds; break;
+        case DOUBLE_XP: doubleXp = type.seconds; break;
+        case RAPID_FIRE: rapid = type.seconds; break;
+        case BOMB:
+            for (Enemy enemy : enemies) {
+                if (enemy.kind == ELITE) enemy.hp -= BOMB_ELITE_DAMAGE;
+                else enemy.hp = 0;
+            }
+            break;
+        default: break;
+        }
+    }
+    private void hurt(double amount) {
+        if (shield > 0) return;
+        hp = Math.max(0, hp - amount); hurtFlash = .18;
+    }
     private void heal(double amount) { if (!isOver()) hp = Math.min(maxHp, hp + amount); }
     public void addExperience(int amount) {
         if (amount < 0 || isOver()) return;
