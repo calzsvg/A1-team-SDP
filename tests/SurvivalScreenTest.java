@@ -8,6 +8,7 @@ import shop.ShapeSkin;
 import shop.Skin;
 import shop.ShopCatalog;
 import shop.ShopCategory;
+import screen.Screen;
 import screen.SurvivalScreen;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -94,6 +95,84 @@ public final class SurvivalScreenTest {
             selectedField.set(purchases, originalShip); skinField.set(purchases, originalSkin);
         }
     }
+    /** Result screen: Retry and Main menu are chosen with the arrows/WASD and Enter. */
+    private static void checkResultMenu(Frame frame) throws Exception {
+        Field running = Screen.class.getDeclaredField("isRunning"); running.setAccessible(true);
+        Field code = Screen.class.getDeclaredField("returnCode"); code.setAccessible(true);
+        SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        running.set(screen, true); // normally set by run()
+        Thread.sleep(1100);
+        SurvivalGame game = (SurvivalGame) GAME.get(screen);
+        game.hp = 0; UPDATE.invoke(screen);
+        tap(frame, screen, KeyEvent.VK_ENTER);
+        SurvivalGame fresh = (SurvivalGame) GAME.get(screen);
+        if (fresh == game || fresh.isOver() || !(Boolean) running.get(screen))
+            throw new AssertionError("Retry is selected first and Enter restarts the run");
+        fresh.hp = 0; UPDATE.invoke(screen);
+        tap(frame, screen, KeyEvent.VK_DOWN); capture("survival-results-menu");
+        tap(frame, screen, KeyEvent.VK_ENTER);
+        if ((Boolean) running.get(screen) || (Integer) code.get(screen) != 1)
+            throw new AssertionError("Main menu closes Survival and returns to the title screen");
+        screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        running.set(screen, true);
+        Thread.sleep(1100);
+        game = (SurvivalGame) GAME.get(screen);
+        game.hp = 0; UPDATE.invoke(screen);
+        tap(frame, screen, KeyEvent.VK_S); tap(frame, screen, KeyEvent.VK_W);
+        tap(frame, screen, KeyEvent.VK_SPACE);
+        if (GAME.get(screen) == game || !(Boolean) running.get(screen))
+            throw new AssertionError("W/S wrap between options and Space confirms");
+    }
+    /** Opens a running Survival screen past its input delay. */
+    private static SurvivalScreen open(Frame frame) throws Exception {
+        Field running = Screen.class.getDeclaredField("isRunning"); running.setAccessible(true);
+        SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        running.set(screen, true); // normally set by run()
+        Thread.sleep(1100);
+        return screen;
+    }
+    /** Pause menu: P/Escape pause and resume; options are chosen with the arrows/WASD and Enter. */
+    private static void checkPauseMenu(Frame frame) throws Exception {
+        Field running = Screen.class.getDeclaredField("isRunning"); running.setAccessible(true);
+        Field code = Screen.class.getDeclaredField("returnCode"); code.setAccessible(true);
+        Field paused = SurvivalScreen.class.getDeclaredField("paused"); paused.setAccessible(true);
+        SurvivalScreen screen = open(frame);
+        SurvivalGame game = (SurvivalGame) GAME.get(screen);
+        tap(frame, screen, KeyEvent.VK_ESCAPE);
+        if (!(Boolean) paused.get(screen) || !(Boolean) running.get(screen))
+            throw new AssertionError("Escape pauses the run instead of leaving it");
+        double clock = game.elapsed;
+        Thread.sleep(100); UPDATE.invoke(screen); capture("survival-pause");
+        if (game.elapsed != clock) throw new AssertionError("The pause menu freezes combat");
+        tap(frame, screen, KeyEvent.VK_ESCAPE);
+        if ((Boolean) paused.get(screen)) throw new AssertionError("Escape resumes from the pause menu");
+        tap(frame, screen, KeyEvent.VK_P); tap(frame, screen, KeyEvent.VK_ENTER);
+        if ((Boolean) paused.get(screen) || GAME.get(screen) != game)
+            throw new AssertionError("Resume is selected first and keeps the run");
+        tap(frame, screen, KeyEvent.VK_P); tap(frame, screen, KeyEvent.VK_DOWN);
+        tap(frame, screen, KeyEvent.VK_ENTER);
+        if ((Boolean) paused.get(screen) || GAME.get(screen) == game || !(Boolean) running.get(screen))
+            throw new AssertionError("Retry starts a fresh, unpaused run");
+        tap(frame, screen, KeyEvent.VK_P); tap(frame, screen, KeyEvent.VK_S); tap(frame, screen, KeyEvent.VK_S);
+        tap(frame, screen, KeyEvent.VK_ENTER);
+        if ((Boolean) running.get(screen) || (Integer) code.get(screen) != 11)
+            throw new AssertionError("Game modes returns to the mode screen");
+        screen = open(frame);
+        tap(frame, screen, KeyEvent.VK_ESCAPE); tap(frame, screen, KeyEvent.VK_UP);
+        capture("survival-pause-menu");
+        tap(frame, screen, KeyEvent.VK_ENTER);
+        if ((Boolean) running.get(screen) || (Integer) code.get(screen) != 1)
+            throw new AssertionError("Up wraps to Main menu, which returns to the title screen");
+        screen = open(frame);
+        game = (SurvivalGame) GAME.get(screen);
+        game.addExperience(game.xpRequired()); UPDATE.invoke(screen);
+        tap(frame, screen, KeyEvent.VK_ESCAPE);
+        if (!(Boolean) paused.get(screen) || game.choices().isEmpty())
+            throw new AssertionError("Escape during a level-up pauses and keeps the choice");
+        tap(frame, screen, KeyEvent.VK_ESCAPE);
+        if ((Boolean) paused.get(screen) || game.choices().size() != 3 || !(Boolean) running.get(screen))
+            throw new AssertionError("Resuming returns to the level-up choice");
+    }
     public static void main(String[] args) throws Exception {
         Frame frame = new Frame(448, 520);
         try {
@@ -111,13 +190,16 @@ public final class SurvivalScreenTest {
             game.addExperience(20); UPDATE.invoke(screen); capture("survival-upgrade");
             tap(frame, screen, KeyEvent.VK_2);
             if (!game.choices().isEmpty()) throw new AssertionError("Number key must select upgrade");
+            game.hp = game.maxHp * .4; UPDATE.invoke(screen); capture("survival-hud-low-hp");
             game.hp = 0; UPDATE.invoke(screen); capture("survival-results");
             tap(frame, screen, KeyEvent.VK_R);
             SurvivalGame fresh = (SurvivalGame) GAME.get(screen);
             if (fresh == game || fresh.hp != 100 || fresh.level != 1)
                 throw new AssertionError("Retry must reset the run");
+            checkResultMenu(frame);
+            checkPauseMenu(frame);
             checkLoadouts(frame);
-            System.out.println("SurvivalScreenTest: rendering, pause, upgrade input, results and retry passed");
+            System.out.println("SurvivalScreenTest: rendering, pause menu, upgrade input, results, retry and result menu passed");
         } finally { frame.dispose(); }
         System.exit(0);
     }

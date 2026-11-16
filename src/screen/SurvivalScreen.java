@@ -21,6 +21,13 @@ public final class SurvivalScreen extends Screen {
     private final boolean[] held = new boolean[256];
     private boolean paused;
     private int selected;
+    /** Result screen options, in display order. */
+    private static final int RETRY = 0, MAIN_MENU = 1;
+    private int resultChoice = RETRY;
+    /** Pause menu options, in display order. */
+    private static final String[] PAUSE_OPTIONS = { "Resume", "Retry", "Game modes", "Main menu" };
+    private static final int PAUSE_RESUME = 0, PAUSE_RETRY = 1, PAUSE_MODES = 2;
+    private int pauseChoice = PAUSE_RESUME;
 
     public SurvivalScreen(int width, int height, int fps) {
         super(width, height, fps);
@@ -41,13 +48,26 @@ public final class SurvivalScreen extends Screen {
         double dt = (now - previousTime) / 1_000_000_000.0;
         previousTime = now;
         if (inputDelay.checkFinished()) {
-            if (pressed(KeyEvent.VK_ESCAPE)) isRunning = false;
-            else if (game.isOver()) {
-                if (pressed(KeyEvent.VK_R)) {
-                    game = new SurvivalGame(width, height, new Random(), shipType);
-                    paused = false;
-                    selected = 0;
+            if (paused) {
+                updatePauseMenu();
+            } else if (game.isOver()) {
+                if (pressed(KeyEvent.VK_ESCAPE)) {
+                    isRunning = false;
+                    return;
                 }
+                if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W)
+                        || pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S))
+                    resultChoice = resultChoice == RETRY ? MAIN_MENU : RETRY;
+                boolean confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
+                if (pressed(KeyEvent.VK_R) || (confirm && resultChoice == RETRY)) {
+                    retry();
+                } else if (confirm) {
+                    returnCode = 1;
+                    isRunning = false;
+                }
+            } else if (pressed(KeyEvent.VK_ESCAPE)) {
+                // Escape pauses instead of quitting, so one key press can't end a run.
+                pause();
             } else if (!game.choices().isEmpty()) {
                 if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W)) selected = (selected + 2) % 3;
                 if (pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S)) selected = (selected + 1) % 3;
@@ -56,8 +76,8 @@ public final class SurvivalScreen extends Screen {
                 if (pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE)) choice = selected;
                 if (choice >= 0) { game.choose(choice); selected = 0; }
             } else {
-                if (pressed(KeyEvent.VK_P)) paused = !paused;
-                if (!paused) game.update(dt,
+                if (pressed(KeyEvent.VK_P)) pause();
+                else game.update(dt,
                         (down(KeyEvent.VK_D) || down(KeyEvent.VK_RIGHT) ? 1 : 0)
                         - (down(KeyEvent.VK_A) || down(KeyEvent.VK_LEFT) ? 1 : 0),
                         (down(KeyEvent.VK_S) || down(KeyEvent.VK_DOWN) ? 1 : 0)
@@ -68,6 +88,35 @@ public final class SurvivalScreen extends Screen {
         drawManager.initDrawing(this);
         draw();
         drawManager.completeDrawing(this);
+    }
+    /** Freezes the run and opens the pause menu on Resume. */
+    private void pause() {
+        paused = true;
+        pauseChoice = PAUSE_RESUME;
+    }
+    /** Pause menu: P or Escape resumes; Enter or Space picks the highlighted option. */
+    private void updatePauseMenu() {
+        if (pressed(KeyEvent.VK_P) || pressed(KeyEvent.VK_ESCAPE)) {
+            paused = false;
+            return;
+        }
+        int count = PAUSE_OPTIONS.length;
+        if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W)) pauseChoice = (pauseChoice + count - 1) % count;
+        if (pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S)) pauseChoice = (pauseChoice + 1) % count;
+        if (!pressed(KeyEvent.VK_ENTER) && !pressed(KeyEvent.VK_SPACE)) return;
+        switch (pauseChoice) {
+        case PAUSE_RESUME: paused = false; break;
+        case PAUSE_RETRY: retry(); break;
+        case PAUSE_MODES: isRunning = false; break; // returnCode is already the mode screen
+        default: returnCode = 1; isRunning = false; break;
+        }
+    }
+    /** Starts a fresh run with the same equipped ship. */
+    private void retry() {
+        game = new SurvivalGame(width, height, new Random(), shipType);
+        paused = false;
+        selected = 0;
+        resultChoice = RETRY;
     }
     private void centered(String value, int y, Color color) {
         drawManager.drawCenteredRegularString(this, value, y, color);
@@ -154,13 +203,19 @@ public final class SurvivalScreen extends Screen {
 
         if (game.isOver()) {
             panel(100, height - 170);
-            title("GAME OVER", 155);
-            centered("SURVIVAL RESULTS", 193, Color.WHITE);
-            centered("LEVEL " + game.level, 237, Color.WHITE);
-            centered("SHIPS DESTROYED " + game.kills, 267, Color.WHITE);
-            centered("TIME " + time(), 297, Color.WHITE);
-            drawManager.drawMenuRow(this, "R Retry", 340, true);
-            drawManager.drawKeyHints(this, "r retry, esc back to modes");
+            title("GAME OVER", 145);
+            centered("SURVIVAL RESULTS", 175, Color.WHITE);
+            drawManager.drawCenteredBigString(this, "SCORE " + game.score(), 222, Color.WHITE);
+            // Each line shows the points it contributed to the score.
+            centered("TIME " + time() + "   +" + game.timeScore(), 260, Color.WHITE);
+            centered("KILLS " + game.kills + "   +" + game.killScore, 288, Color.WHITE);
+            centered("LEVEL " + game.level, 316, Color.GRAY);
+            drawManager.drawMenuRow(this, "Retry", 365, resultChoice == RETRY);
+            drawManager.drawMenuRow(this, "Main menu", 400, resultChoice == MAIN_MENU);
+            drawManager.drawKeyHints(this, "w+s/arrows select, enter confirm, r retry, esc modes");
+        } else if (paused) {
+            drawManager.drawPauseMenu(this, PAUSE_OPTIONS, pauseChoice);
+            drawManager.drawKeyHints(this, "w+s/arrows select, enter confirm, p/esc resume");
         } else if (!game.choices().isEmpty()) {
             panel(100, height - 170);
             title("LEVEL UP", 135);
@@ -172,11 +227,8 @@ public final class SurvivalScreen extends Screen {
                 smallCentered(upgrade.description, baseline + 21, Color.GRAY);
             }
             drawManager.drawKeyHints(this, "1/2/3 select, w+s/arrows move, enter confirm");
-        } else if (paused) {
-            drawManager.drawPauseMenu(this, new String[] { "P Resume", "ESC Mode menu" }, 0);
-            drawManager.drawKeyHints(this, "p resume, esc back to modes");
         } else {
-            smallCentered("wasd/arrows move, auto fire, p pause, esc back", height - 10, Color.GRAY);
+            smallCentered("wasd/arrows move, auto fire, p/esc pause", height - 10, Color.GRAY);
             if (game.elapsed < 6) {
                 smallCentered("Destroy enemies before they reach the bottom", 106, Color.WHITE);
                 smallCentered("Kills grant XP. Collect + drops to repair HP.", 123, Color.GRAY);
@@ -186,20 +238,27 @@ public final class SurvivalScreen extends Screen {
     private String time() {
         return String.format("%02d:%02d", (int) game.elapsed / 60, (int) game.elapsed % 60);
     }
+    /** HP color: green above half, yellow above a quarter, red below. */
+    private Color hpColor() {
+        double ratio = game.hp / game.maxHp;
+        return ratio > .5 ? Color.GREEN : ratio > .25 ? Color.YELLOW : Color.RED;
+    }
     private void drawHud() {
         drawManager.fillBox(0, 0, width, 85, Color.BLACK);
         drawManager.drawRegularString("HP", 12, 24, Color.WHITE);
         drawManager.drawRegularString((int) Math.ceil(game.hp) + "/" + (int) game.maxHp,
-                45, 24, game.hurtFlash > 0 ? Color.RED : Color.GREEN);
-        String summary = "LV " + game.level + "  TIME " + time();
+                45, 24, game.hurtFlash > 0 ? Color.RED : hpColor());
+        String summary = "KILLS " + game.kills + "  TIME " + time();
         drawManager.drawRegularString(summary,
                 width - 12 - drawManager.getRegularStringWidth(summary), 24, Color.WHITE);
         drawManager.drawHorizontalLine(this, 39);
-        bar(12, 31, 115, game.hp / game.maxHp, Color.GREEN);
-        drawManager.drawSmallString("XP " + game.xp + "/" + game.xpRequired(), 12, 54, Color.WHITE);
-        bar(130, 47, width - 142, (double) game.xp / game.xpRequired(), Color.GREEN);
-        smallCentered(ShopCatalog.shipName(shipType) + "  " + String.format("DMG %.0f  RATE %.1f  SHOTS %d  KILLS %d",
-                game.damage, 1 / game.fireInterval, game.projectiles, game.kills), 68, Color.GRAY);
+        bar(12, 31, 115, game.hp / game.maxHp, hpColor());
+        String xpLabel = "LV " + game.level + "  XP " + game.xp + "/" + game.xpRequired();
+        drawManager.drawSmallString(xpLabel, 12, 54, Color.WHITE);
+        int xpBar = 22 + drawManager.getSmallStringWidth(xpLabel);
+        bar(xpBar, 47, width - 12 - xpBar, (double) game.xp / game.xpRequired(), Color.GREEN);
+        smallCentered(ShopCatalog.shipName(shipType) + "  " + String.format("DMG %.0f  RATE %.1f  SHOTS %d",
+                game.damage, 1 / game.fireInterval, game.projectiles), 68, Color.GRAY);
         smallCentered(String.format("LIFESTEAL %.0f%%  REPAIR %.1f HP/S",
                 game.lifesteal * 100, game.regeneration), 81, Color.GRAY);
     }
