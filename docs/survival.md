@@ -21,7 +21,10 @@ Choose **Play > Survival**. Survive as long as possible; upgrades reset each run
 - Upgrades include damage, firing speed, multishot, maximum HP, movement speed, lifesteal, regeneration and immediate healing. Lifesteal heals a percentage of actual damage dealt, excluding overkill.
 - Enemies have a 12% chance to drop a green repair pickup restoring 15 HP. Healing cannot exceed maximum HP.
 - Special pickups (letter boxes) drop from kills (5% chance; elites always drop one): **S** shield (5 s invulnerable), **M** magnet (8 s, pulls pickups within 90 px toward the ship; pickups are otherwise only collected by touching them), **B** bomb (destroys normal enemies, deals 100 damage to elites), **X** double XP (15 s), **R** rapid fire (8 s, 40% faster fire). Active effects and their remaining seconds appear under the HUD.
-- P pauses/resumes. Escape returns to mode selection. At zero HP, view run results and press R to retry.
+- The HUD shows HP (the bar turns yellow below 50% and red below 25%), kills and survival time at the top, with the level and XP bar below.
+- Score: each kill scores by enemy kind (grunt 10, mini 5, shooter 15, rusher 15, splitter 20, armored 25, elite 100), plus 5 points per full second survived. Escaping enemies score nothing.
+- P or Escape pauses (also during a level-up choice). The pause menu offers **Resume**, **Retry**, **Game modes** and **Main menu**: choose with W/S or the arrows and Enter (or Space). P or Escape resumes.
+- At zero HP the result screen shows the score, with the points from survival time and from kills, and the level reached. Choose **Retry** or **Main menu** with W/S or the arrows and Enter (or Space). R retries and Escape returns to mode selection.
 
 Standalone checks (after compiling the game):
 

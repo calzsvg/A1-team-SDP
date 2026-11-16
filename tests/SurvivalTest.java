@@ -279,6 +279,28 @@ public final class SurvivalTest {
         check(game.xpRequired() == 100, "First level needs 100 XP");
         game.addExperience(100);
         check(game.xpRequired() == 135 && game.level == 2, "Each level needs 35 more XP");
+        // Score: kill points plus 5 per full second survived.
+        game = game();
+        check(game.score() == 0, "A new run starts with no score");
+        game.enemies.add(new Enemy(60, 200, SurvivalGame.GRUNT, 5, 0));
+        game.enemies.add(new Enemy(160, 200, SurvivalGame.ARMORED, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.shots.add(new Shot(160, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.kills == 2 && game.killScore == 35, "Grunts score 10 and armored enemies 25");
+        game.elapsed = 61.9;
+        check(game.timeScore() == 305 && game.score() == 340, "Each full second survived scores 5");
+        check(SurvivalGame.pointsFor(SurvivalGame.ELITE) == 100 && SurvivalGame.pointsFor(SurvivalGame.MINI) == 5
+                && SurvivalGame.pointsFor(SurvivalGame.SHOOTER) == 15 && SurvivalGame.pointsFor(SurvivalGame.RUSHER) == 15
+                && SurvivalGame.pointsFor(SurvivalGame.SPLITTER) == 20, "Every enemy kind has a score value");
+        game = game();
+        game.enemies.add(new Enemy(60, game.height - 28, SurvivalGame.GRUNT, 1000, 0));
+        game.update(.016, 0, 0);
+        check(game.enemies.isEmpty() && game.killScore == 0, "Escaping enemies score nothing");
+        game = game(); game.killScore = 50; game.elapsed = 10; game.hp = 0;
+        int finalScore = game.score();
+        game.update(.05, 0, 0);
+        check(game.score() == finalScore, "The score is frozen once the run is over");
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {
