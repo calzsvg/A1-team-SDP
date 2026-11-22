@@ -301,6 +301,105 @@ public final class SurvivalTest {
         int finalScore = game.score();
         game.update(.05, 0, 0);
         check(game.score() == finalScore, "The score is frozen once the run is over");
+        // Difficulty scaling over time.
+        check(SurvivalGame.spawnInterval(0) == .85, "Spawning starts at one enemy every 0.85 s");
+        check(SurvivalGame.spawnInterval(120) < SurvivalGame.spawnInterval(60)
+                && SurvivalGame.spawnInterval(60) < SurvivalGame.spawnInterval(0), "Enemies spawn faster as time passes");
+        check(SurvivalGame.spawnInterval(10000) == SurvivalGame.MIN_SPAWN_INTERVAL, "Spawn interval has a floor");
+        game = game();
+        check(game.strength() == 1, "Enemy strength starts at 1");
+        game.elapsed = 480;
+        check(game.strength() == 3, "Enemy strength grows by 1 every 240 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 480;
+        double maxPower = 0;
+        for (int i = 0; i < 100; i++) {
+            game.update(.05, 0, 0);
+            for (Enemy e : game.enemies) maxPower = Math.max(maxPower, e.power);
+        }
+        check(maxPower > 3, "Enemies spawned later carry a higher power");
+        game = game();
+        Enemy escape = new Enemy(60, game.height - 20, 0, 5, 0); escape.power = 2;
+        game.enemies.add(escape);
+        game.update(.016, 0, 0);
+        check(game.hp == 76, "Escaping enemies hurt in proportion to their power");
+        game = game();
+        Enemy rammer = new Enemy(game.x, game.y, 0, 5, 0); rammer.power = 2;
+        game.enemies.add(rammer);
+        game.update(.016, 0, 0);
+        check(game.hp == 64, "Contact damage scales with enemy power");
+        game = game();
+        Enemy gunner = new Enemy(60, 200, SurvivalGame.SHOOTER, 100000, 0); gunner.power = 2;
+        game.enemies.add(gunner);
+        double hostile = 0;
+        for (int i = 0; i < 60 && hostile == 0; i++) {
+            game.update(.05, 0, 0);
+            for (Shot shot : game.shots) if (shot.hostile) hostile = shot.damage;
+        }
+        check(hostile == 20, "Enemy projectile damage scales with enemy power");
+        game = game();
+        Enemy strong = new Enemy(60, 200, 0, 5, 0); strong.power = 2;
+        game.enemies.add(strong);
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.xp == 12, "Stronger enemies grant proportionally more XP");
+
+        // More upgrade options.
+        check(Upgrade.values().length == 12, "The upgrade pool has 12 options");
+        game = offering(Upgrade.CRITICAL); select(game, Upgrade.CRITICAL);
+        check(Math.abs(game.critChance - .1) < 1e-9, "Critical hits add 10% chance");
+        game = offering(Upgrade.ARMOR); select(game, Upgrade.ARMOR);
+        check(Math.abs(game.armor - .1) < 1e-9, "Plating adds 10% damage reduction");
+        game = offering(Upgrade.SCAVENGER); select(game, Upgrade.SCAVENGER);
+        check(Math.abs(game.xpBonus - .2) < 1e-9, "Scavenger adds 20% XP");
+        game = offering(Upgrade.SALVAGE); select(game, Upgrade.SALVAGE);
+        check(Math.abs(game.dropBonus - .03) < 1e-9, "Salvage rights add 3% drop chance");
+        game = new SurvivalGame(448, 520, new Random(3) {
+            @Override public double nextDouble() { return 0; }
+        });
+        Enemy target = new Enemy(60, 200, 0, 100, 0);
+        game.enemies.add(target);
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(target.hp == 88, "Without critical hits a shot deals normal damage");
+        game = new SurvivalGame(448, 520, new Random(3) {
+            @Override public double nextDouble() { return 0; }
+        });
+        game.critChance = .1;
+        target = new Enemy(60, 200, 0, 100, 0);
+        game.enemies.add(target);
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(target.hp == 76, "A critical hit deals double damage");
+        game = game(); game.armor = .5;
+        Enemy bottom = new Enemy(60, game.height - 20, 0, 5, 0);
+        game.enemies.add(bottom);
+        game.update(.016, 0, 0);
+        check(game.hp == 94, "Plating reduces damage taken");
+        game = game(); game.xpBonus = .5;
+        game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+        game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+        game.update(.016, 0, 0);
+        check(game.xp == 9, "Scavenger raises XP from kills");
+        for (int round = 0; round < 2; round++) {
+            game = new SurvivalGame(448, 520, new Random(3) {
+                @Override public double nextDouble() { return .06; }
+            });
+            game.dropBonus = round == 0 ? 0 : .03;
+            game.enemies.add(new Enemy(60, 200, 0, 5, 0));
+            game.shots.add(new Shot(60, 200, 0, 0, 12, false));
+            game.update(.016, 0, 0);
+            check(game.pickups.size() == round, round == 0 ? "No pickup at 6% roll without salvage"
+                    : "Salvage rights turn a 6% roll into a pickup");
+        }
+        for (int seed = 0; seed < 100; seed++) {
+            game = new SurvivalGame(448, 520, new Random(seed));
+            game.critChance = .5; game.armor = .5; game.xpBonus = 1; game.dropBonus = .2;
+            game.addExperience(game.xpRequired());
+            check(!game.choices().contains(Upgrade.CRITICAL) && !game.choices().contains(Upgrade.ARMOR)
+                    && !game.choices().contains(Upgrade.SCAVENGER) && !game.choices().contains(Upgrade.SALVAGE),
+                    "Maxed upgrades are no longer offered");
+        }
+
         // Exercise sustained play, changing upgrades, spawning, and list removal.
         game = game(); game.hp = game.maxHp = 100000;
         for (int i = 0; i < 12000; i++) {
