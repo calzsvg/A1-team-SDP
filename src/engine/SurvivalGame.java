@@ -35,9 +35,9 @@ public final class SurvivalGame {
     /** Enemy power is 1 at the start and grows by 1 every STRENGTH_SECONDS. */
     public static final double STRENGTH_SECONDS = 240;
     /** Spawn interval starts at 0.85 s and shrinks by 0.5% per second, never below MIN_SPAWN_INTERVAL. */
-    public static final double START_SPAWN_INTERVAL = .85, MIN_SPAWN_INTERVAL = .12;
+    public static final double START_SPAWN_INTERVAL = .85, MIN_SPAWN_INTERVAL = .15;
     public static double spawnInterval(double elapsed) {
-        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.995, elapsed));
+        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.997, elapsed));
     }
     /** Enemy strength multiplier at the current time. */
     public double strength() { return 1 + elapsed / STRENGTH_SECONDS; }
