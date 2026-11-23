@@ -17,7 +17,11 @@ public final class SurvivalGame {
         LIFESTEAL("Vampire rounds", "+4% damage converted to HP"),
         REGEN("Repair drones", "+0.8 HP per second"),
         SPEED("Thrusters", "+12% movement speed"),
-        HEAL("Emergency repair", "Restore 40% max HP");
+        HEAL("Emergency repair", "Restore 40% max HP"),
+        CRITICAL("Critical hits", "+10% chance to deal double damage"),
+        ARMOR("Plating", "Take 10% less damage"),
+        SCAVENGER("Scavenger", "+20% XP from kills"),
+        SALVAGE("Salvage rights", "+3% special pickup drop chance");
         public final String title, description;
         Upgrade(String title, String description) {
             this.title = title; this.description = description;
@@ -28,11 +32,22 @@ public final class SurvivalGame {
             SPLITTER = 4, ELITE = 5, MINI = 6;
     /** Seconds between difficulty tiers, and between elite arrivals. */
     public static final double TIER_SECONDS = 30, ELITE_SECONDS = 60;
+    /** Enemy power is 1 at the start and grows by 1 every STRENGTH_SECONDS. */
+    public static final double STRENGTH_SECONDS = 240;
+    /** Spawn interval starts at 0.85 s and shrinks by 0.5% per second, never below MIN_SPAWN_INTERVAL. */
+    public static final double START_SPAWN_INTERVAL = .85, MIN_SPAWN_INTERVAL = .15;
+    public static double spawnInterval(double elapsed) {
+        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.997, elapsed));
+    }
+    /** Enemy strength multiplier at the current time. */
+    public double strength() { return 1 + elapsed / STRENGTH_SECONDS; }
     public static final class Enemy {
         public double x, y, hp;
         public final double maxHp, speed;
         public final int kind;
         double fireClock = 1.5;
+        /** Strength multiplier fixed when the enemy spawns; scales its damage and the XP it grants. */
+        public double power = 1;
         public Enemy(double x, double y, int kind, double hp, double speed) {
             this.x = x; this.y = y; this.kind = kind;
             this.hp = hp; this.maxHp = hp; this.speed = speed;
@@ -91,6 +106,8 @@ public final class SurvivalGame {
     public double x, y, hp = 100, maxHp = 100, elapsed;
     public double damage = 12, fireInterval = .18, moveSpeed = 220;
     public double lifesteal, regeneration, hurtFlash;
+    /** Upgrade-driven bonuses: critical hit chance, damage reduction, extra XP and extra pickup drop chance. */
+    public double critChance, armor, xpBonus, dropBonus;
     /** Seconds left on each timed pickup effect. */
     public double shield, magnet, doubleXp, rapid;
     public int level = 1, xp, kills, projectiles = 1;
@@ -166,7 +183,9 @@ public final class SurvivalGame {
         case MINI: hp = 8 + tier * 2; speed = 80; break;
         default: hp = 18 + tier * 8; speed = 48 + Math.min(65, elapsed * .22); break;
         }
-        return new Enemy(x, y, kind, hp, speed);
+        Enemy enemy = new Enemy(x, y, kind, hp, speed);
+        enemy.power = strength();
+        return enemy;
     }
     public List<Upgrade> choices() { return Collections.unmodifiableList(choices); }
     public void update(double dt, double dx, double dy) {
@@ -198,7 +217,7 @@ public final class SurvivalGame {
         }
         spawnClock -= dt;
         if (spawnClock <= 0) {
-            spawnClock += Math.max(.18, .85 - elapsed * .003);
+            spawnClock += spawnInterval(elapsed);
             int kind = pickKind();
             enemies.add(newEnemy(kind, 20 + random.nextDouble() * (width - 40), -20));
         }
@@ -219,10 +238,10 @@ public final class SurvivalGame {
                 if (enemy.fireClock <= 0) {
                     boolean elite = enemy.kind == ELITE;
                     enemy.fireClock = elite ? 1.6 : 2.4;
-                    shots.add(new Shot(enemy.x, enemy.y + 12, 0, 150, 10, true));
+                    shots.add(new Shot(enemy.x, enemy.y + 12, 0, 150, 10 * enemy.power, true));
                     if (elite) {
-                        shots.add(new Shot(enemy.x, enemy.y + 12, -60, 150, 10, true));
-                        shots.add(new Shot(enemy.x, enemy.y + 12, 60, 150, 10, true));
+                        shots.add(new Shot(enemy.x, enemy.y + 12, -60, 150, 10 * enemy.power, true));
+                        shots.add(new Shot(enemy.x, enemy.y + 12, 60, 150, 10 * enemy.power, true));
                     }
                 }
             }
@@ -237,8 +256,9 @@ public final class SurvivalGame {
                 for (Enemy enemy : enemies) {
                     if (enemy.hp > 0 && Math.abs(shot.x - enemy.x) < 14 + shot.width / 2.0
                             && Math.abs(shot.y - enemy.y) < 12 + shot.height / 2.0) {
-                        double dealt = Math.min(enemy.hp, shot.damage);
-                        enemy.hp -= shot.damage; heal(dealt * lifesteal); removed = true;
+                        double hit = shot.damage * (critChance > 0 && random.nextDouble() < critChance ? 2 : 1);
+                        double dealt = Math.min(enemy.hp, hit);
+                        enemy.hp -= hit; heal(dealt * lifesteal); removed = true;
                         break;
                     }
                 }
@@ -250,12 +270,12 @@ public final class SurvivalGame {
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy enemy = it.next();
             if (enemy.hp <= 0) {
-                kills++; earned += xpFor(enemy.kind); killScore += pointsFor(enemy.kind);
+                kills++; earned += (int) Math.max(1, Math.round(xpFor(enemy.kind) * enemy.power)); killScore += pointsFor(enemy.kind);
                 // Elites always drop a repair kit; everything else has a 12% chance.
                 if (enemy.kind == ELITE || random.nextDouble() < .12)
                     repairs.add(new Repair(enemy.x, enemy.y));
                 // Elites always drop a special pickup too; others rarely.
-                if (enemy.kind == ELITE || random.nextDouble() < ITEM_DROP_CHANCE) {
+                if (enemy.kind == ELITE || random.nextDouble() < ITEM_DROP_CHANCE + dropBonus) {
                     ItemType[] types = ItemType.values();
                     pickups.add(new Pickup(enemy.x, enemy.y, types[random.nextInt(types.length)]));
                 }
@@ -265,9 +285,9 @@ public final class SurvivalGame {
                 }
                 it.remove();
             } else if (enemy.y >= height - 28) {
-                hurt(12); it.remove();
+                hurt(12 * enemy.power); it.remove();
             } else if (Math.abs(enemy.x - x) < 25 && Math.abs(enemy.y - y) < 26) {
-                if (contactGrace <= 0) { hurt(18); contactGrace = .6; }
+                if (contactGrace <= 0) { hurt(18 * enemy.power); contactGrace = .6; }
                 it.remove();
             }
         }
@@ -292,7 +312,7 @@ public final class SurvivalGame {
             if (distance < 20) { apply(pickup.type); it.remove(); }
             else if (pickup.y > height) it.remove();
         }
-        if (!isOver()) addExperience(doubleXp > 0 ? earned * 2 : earned);
+        if (!isOver()) addExperience((int) Math.round(earned * (doubleXp > 0 ? 2 : 1) * (1 + xpBonus)));
     }
     /** Activates a pickup's effect. Timed effects refresh to their full duration. */
     private void apply(ItemType type) {
@@ -312,7 +332,7 @@ public final class SurvivalGame {
     }
     private void hurt(double amount) {
         if (shield > 0) return;
-        hp = Math.max(0, hp - amount); hurtFlash = .18;
+        hp = Math.max(0, hp - amount * (1 - armor)); hurtFlash = .18;
     }
     private void heal(double amount) { if (!isOver()) hp = Math.min(maxHp, hp + amount); }
     public void addExperience(int amount) {
@@ -328,6 +348,10 @@ public final class SurvivalGame {
             if (upgrade == Upgrade.FIRE_RATE && fireInterval <= .055) continue;
             if (upgrade == Upgrade.LIFESTEAL && lifesteal >= .24) continue;
             if (upgrade == Upgrade.SPEED && moveSpeed >= 380) continue;
+            if (upgrade == Upgrade.CRITICAL && critChance >= .5) continue;
+            if (upgrade == Upgrade.ARMOR && armor >= .5) continue;
+            if (upgrade == Upgrade.SCAVENGER && xpBonus >= 1) continue;
+            if (upgrade == Upgrade.SALVAGE && dropBonus >= .2) continue;
             pool.add(upgrade);
         }
         Collections.shuffle(pool, random); choices.addAll(pool.subList(0, 3));
@@ -343,6 +367,10 @@ public final class SurvivalGame {
         case REGEN: regeneration += .8; break;
         case SPEED: moveSpeed = Math.min(380, moveSpeed * 1.12); break;
         case HEAL: heal(maxHp * .4); break;
+        case CRITICAL: critChance = Math.min(.5, critChance + .1); break;
+        case ARMOR: armor = Math.min(.5, armor + .1); break;
+        case SCAVENGER: xpBonus = Math.min(1, xpBonus + .2); break;
+        case SALVAGE: dropBonus = Math.min(.2, dropBonus + .03); break;
         default: break;
         }
         choices.clear(); offerLevel();
