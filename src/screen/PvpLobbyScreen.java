@@ -10,7 +10,8 @@ import pvp.PvpProtocol;
 /**
  * Online lobby preserving the original two-player panel layout.
  * The local player is below the opponent. Each client controls its own readiness;
- * the server owns the countdown. The connection stays open for the match.
+ * the server owns the countdown. The host (player 0) chooses Normal or Augment mode
+ * before getting ready; the guest sees the choice. The connection stays open for the match.
  */
 public final class PvpLobbyScreen extends Screen {
     public static final int PVP_GAME_CODE = 9;
@@ -19,7 +20,7 @@ public final class PvpLobbyScreen extends Screen {
     private final PvpClient client;
     private final String roomCode;
     private final Starfield starfield;
-    private boolean localReady, readyWasDown, escapeWasDown, retryWasDown;
+    private boolean localReady, augmentMode, readyWasDown, escapeWasDown, retryWasDown, modeWasDown;
 
     public PvpLobbyScreen(int width, int height, int fps, PvpClient client, String roomCode) {
         super(width, height, fps);
@@ -30,7 +31,19 @@ public final class PvpLobbyScreen extends Screen {
         readyWasDown = inputManager.isKeyDown(KeyEvent.VK_SPACE);
         escapeWasDown = inputManager.isKeyDown(KeyEvent.VK_ESCAPE);
         retryWasDown = inputManager.isKeyDown(KeyEvent.VK_R);
+        modeWasDown = modeKeyDown();
         client.setInput(0);
+    }
+
+    private boolean modeKeyDown() {
+        return inputManager.isKeyDown(KeyEvent.VK_M) || inputManager.isKeyDown(KeyEvent.VK_LEFT)
+                || inputManager.isKeyDown(KeyEvent.VK_RIGHT) || inputManager.isKeyDown(KeyEvent.VK_A)
+                || inputManager.isKeyDown(KeyEvent.VK_D);
+    }
+
+    /** Only the host picks the mode, and only before getting ready. */
+    private boolean canChooseMode() {
+        return client.getPlayer() == 0 && !localReady;
     }
 
     public int run() { super.run(); return returnCode; }
@@ -39,6 +52,9 @@ public final class PvpLobbyScreen extends Screen {
         boolean space = inputManager.isKeyDown(KeyEvent.VK_SPACE);
         boolean escape = inputManager.isKeyDown(KeyEvent.VK_ESCAPE);
         boolean retry = inputManager.isKeyDown(KeyEvent.VK_R);
+        boolean mode = modeKeyDown();
+        boolean modePressed = mode && !modeWasDown;
+        modeWasDown = mode;
         boolean readyPressed = space && !readyWasDown;
         boolean escapePressed = escape && !escapeWasDown;
         boolean retryPressed = retry && !retryWasDown;
@@ -53,7 +69,7 @@ public final class PvpLobbyScreen extends Screen {
                 returnCode = SETUP_CODE; isRunning = false; return;
             }
         } else {
-            if (state != null && (state.phase == PvpMatch.PLAYING || state.phase == PvpMatch.FINISHED)) {
+            if (state != null && state.phase != PvpMatch.WAITING && state.phase != PvpMatch.COUNTDOWN) {
                 client.setInput(0);
                 returnCode = PVP_GAME_CODE; isRunning = false; return;
             }
@@ -62,8 +78,13 @@ public final class PvpLobbyScreen extends Screen {
                 localReady = !localReady;
                 MenuSounds.playMove();
             }
+            if (state != null && state.phase == PvpMatch.WAITING
+                    && inputDelay.checkFinished() && modePressed && canChooseMode()) {
+                augmentMode = !augmentMode;
+                MenuSounds.playMove();
+            }
             // Never send movement or fire while the lobby owns the client.
-            client.setInput(localReady ? PvpMatch.READY : 0);
+            client.setInput((localReady ? PvpMatch.READY : 0) | (augmentMode ? PvpMatch.AUGMENT : 0));
         }
         starfield.update(); draw();
     }
@@ -85,6 +106,13 @@ public final class PvpLobbyScreen extends Screen {
         drawPlayerPanel("OPPONENT", "REMOTE PLAYER", opponentPresent,
                 opponentPresent && state.ready[1 - local], false, height * 2 / 9);
         drawManager.drawMenuRow(this, "VS", height / 2, false);
+        if (connected) {
+            String modeName = state.mode == PvpMatch.AUGMENT_MODE ? "AUGMENT" : "NORMAL";
+            String hint = local == 0 ? (canChooseMode() ? "  (M to change)" : "") : "  (host's choice)";
+            drawManager.drawMenuRow(this, "MODE: " + modeName + hint, height / 2 - 30,
+                    state.mode == PvpMatch.AUGMENT_MODE);
+            drawManager.drawSmallString("BEST OF " + PvpMatch.ROUNDS, 12, 38, Color.GRAY);
+        }
         drawPlayerPanel("YOU", "A/D or arrows move - SPACE fire", connected,
                 connected && (state.players < 2 ? localReady : state.ready[local]), true, height * 3 / 5);
         String message;
@@ -96,6 +124,7 @@ public final class PvpLobbyScreen extends Screen {
         drawManager.drawMenuRow(this, message, height * 7 / 8,
                 connected && state.phase == PvpMatch.COUNTDOWN);
         drawManager.drawSmallString(client.isClosed() ? "R setup  ESC back"
+                : client.getPlayer() == 0 ? "M mode  SPACE toggle ready  ESC back"
                 : "SPACE toggle ready  ESC back", 12, height - 32, Color.GRAY);
         drawManager.completeDrawing(this);
     }

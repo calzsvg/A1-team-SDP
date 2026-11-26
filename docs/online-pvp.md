@@ -10,6 +10,9 @@
 3. Enter a **Connection number** containing exactly three digits, including any leading zeroes.
 4. Click **Connect** to open the PvP lobby. Your friend must enter the same server and connection number.
 5. The lobby shows your ship at the bottom, your opponent at the top, and each player's readiness.
+   The first player in the room is the **host** and chooses the game mode with **M** (or the
+   left/right keys): **Normal** or **Augment**. The guest sees the chosen mode in the lobby.
+   The mode is locked once the host is ready.
    Press **SPACE** to toggle your own readiness. The countdown starts when both players are ready.
 6. The server starts the match after three seconds. The game switches to the match screen
    without reconnecting or creating another room.
@@ -39,11 +42,32 @@ connection before creating another; leaving PvP closes the connection as well.
 - Each player sees their own green ship at the bottom and their red opponent rotated 180 degrees at the top.
 - Movement input and projectile positions use the same perspective transform. Text remains upright.
 - Each ship has five health points. The server decides movement, shots, collisions, damage, and results.
-- Simultaneous destruction is a draw. Press **ESC** to return to the menu.
+- A match is a **best-of-five series**. The first player to win three rounds wins the match;
+  if five rounds are played, the player with more round wins takes it, and a tie is a draw.
+- Simultaneous destruction draws the round (no one scores). Between rounds the series score is
+  shown for three seconds, then both ships reset to full health. The final winner and score are
+  shown at the end. Press **ESC** to return to the menu.
+
+### Augment mode
+
+Augments appear in the middle of the arena three seconds into each round and then every five
+seconds (at most two at once). Each one drifts into a player's lane, alternating between the
+players, and floats along it for eight seconds. Move into an augment to collect it.
+
+| Augment | Icon | Effect |
+| --- | --- | --- |
+| Triple Shot | `T` | Each shot fires three bullets (straight and two diagonals) |
+| Rapid Fire | `R` | Halves the firing cooldown |
+| Extra Life | `+` | Adds one health point (up to eight) |
+| Teleport | `P` | **S**, down arrow, or **Shift** jumps to the mirrored position (1.5 s cooldown) |
+
+The server spawns augments, detects pickups, and applies effects. Augments and their effects
+only last for the current round and are cleared when the next round starts.
+Active effects for both players are listed under the arena.
 - Disconnecting closes the room for both players. The number can then be reused.
 - Different numbers create separate rooms. A third player cannot join a full room.
 - The server supports up to 16 rooms. Waiting/ready rooms expire after two minutes;
-  sessions expire after ten minutes from the first connection.
+  sessions expire after fifteen minutes from the first connection.
 
 ## Building and running
 
@@ -117,14 +141,18 @@ on the same port. Service isolation reduces privileges; it is not a complete sec
 
 ## Protocol and tests
 
-Protocol version 2 adds a room number and explicit rejection messages. Version 1 clients
-and servers are incompatible and must be updated together. The room number is sent as
+Protocol version 3 adds the game mode, the best-of-five series score, active augment effects,
+and augment positions to each snapshot, plus mode and skill input bits. Version 2 added a room
+number and explicit rejection messages. Older clients and servers are incompatible and must be
+updated together, including the dedicated server. The room number is sent as
 an integer from 0 to 999; the entry form preserves the three-digit representation.
 
 ```bash
 bash scripts/build-pvp.sh
 javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpTest.java
 java -cp bin PvpTest
+javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpModeSeriesTest.java
+java -cp bin PvpModeSeriesTest
 javac --release 17 -encoding UTF-8 -cp bin -d bin tests/PvpLobbyFlowTest.java
 java -Djava.awt.headless=true -cp bin:res PvpLobbyFlowTest
 ```
@@ -132,6 +160,8 @@ java -Djava.awt.headless=true -cp bin:res PvpLobbyFlowTest
 Tests cover endpoint validation, short names, leading zeroes, input directions, countdown,
 boundaries, collisions, wins, draws, malformed states, and real TCP clients using isolated rooms.
 They also cover full-room rejection, invalid room numbers, disconnection, and room-number reuse.
+`PvpModeSeriesTest` covers host-only mode selection, augment spawning and pickup, each augment's
+effect, per-round reset, early and drawn series results, and the guest seeing the host's mode.
 The lobby flow test checks server readiness, countdown, socket preservation, and completing a match
 through the same client after the lobby-to-match transition.
 
@@ -142,6 +172,5 @@ Anyone who can reach the server can try numbers. Keeping an address out of sourc
 not secure an Internet-accessible service. Use appropriate access controls for private play.
 This protocol has no account authentication or TLS, so do not send passwords or personal data.
 
-The initial implementation does not integrate shop weapons, skins, items, rankings, or reconnect
-restoration. Simulation runs at approximately 60 ticks per second; clients receive snapshots
+PvP does not integrate shop weapons, skins, items, rankings, or reconnect restoration. Simulation runs at approximately 60 ticks per second; clients receive snapshots
 approximately 30 times per second without prediction or interpolation.
