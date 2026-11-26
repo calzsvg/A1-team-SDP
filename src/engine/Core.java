@@ -19,7 +19,6 @@ import screen.ScoreScreen;
 import screen.Screen;
 import screen.SettingsScreen;
 import screen.ShopScreen;
-import screen.SurvivalRankingScreen;
 import screen.SurvivalScreen;
 import screen.ShipSelectScreen;
 import screen.TitleScreen;
@@ -264,11 +263,6 @@ public final class Core {
 			case 10:
 				// Standalone auto-fire Survival run.
 				currentScreen = new SurvivalScreen(width, height, FPS);
-				returnCode = frame.setScreen(currentScreen);
-				break;
-			case 12:
-				// Local Survival ranking; Escape goes back to the game modes.
-				currentScreen = new SurvivalRankingScreen(width, height, FPS);
 				returnCode = frame.setScreen(currentScreen);
 				break;
 			case 11:

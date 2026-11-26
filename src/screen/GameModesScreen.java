@@ -9,8 +9,8 @@ import engine.soundEngine.SoundManager;
 
 /** Lets the player choose a game mode from the main menu. */
 public final class GameModesScreen extends Screen {
-	private static final String[] MODES = { "Classic", "PvP", "Survival", "Survival ranking" };
-	private static final int[] CODES = { 2, 8, 10, 12 };
+	private static final String[] MODES = { "Classic", "PvP", "Survival" };
+	private static final int[] CODES = { 2, 8, 10 };
 	private final Cooldown selectionCooldown;
 	private int selected;
 	private boolean confirmWasDown;

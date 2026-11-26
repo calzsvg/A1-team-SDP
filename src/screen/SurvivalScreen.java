@@ -228,7 +228,7 @@ public final class SurvivalScreen extends Screen {
         if (game.isOver() && showRanking) {
             panel(100, height - 150);
             title("RANKING", 135);
-            SurvivalRankingScreen.drawTable(this, drawManager, ranking, rankPlace, 165);
+            drawTable(165);
             drawManager.drawKeyHints(this, "enter/esc back to results");
         } else if (game.isOver()) {
             panel(100, height - 150);
@@ -300,5 +300,34 @@ public final class SurvivalScreen extends Screen {
         int panelWidth = width - 32;
         drawManager.fillBox(16, top, panelWidth, panelHeight, Color.BLACK);
         drawManager.drawBox(16, top, panelWidth, panelHeight, Color.GREEN);
+    }
+    /** "mm:ss" for a number of seconds. */
+    private static String clock(int seconds) {
+        return String.format("%02d:%02d", seconds / 60, seconds % 60);
+    }
+    /**
+     * Draws the ranking table starting at the given y; the row at {@code highlight} (zero-based, or -1 for none)
+     * is drawn in yellow with a marker so the player can find their own run.
+     */
+    private void drawTable(int top) {
+        int[] columns = { 40, 90, 215, 310 };
+        String[] heads = { "#", "SCORE", "TIME", "LEVEL" };
+        for (int c = 0; c < heads.length; c++) drawManager.drawSmallString(heads[c], columns[c], top, Color.GRAY);
+        drawManager.fillBox(24, top + 6, width - 48, 1, Color.GREEN);
+        if (ranking.entries().isEmpty()) {
+            String none = "No runs yet";
+            drawManager.drawSmallString(none, (width - drawManager.getSmallStringWidth(none)) / 2, top + 50, Color.GRAY);
+            return;
+        }
+        for (int i = 0; i < ranking.entries().size(); i++) {
+            SurvivalRanking.Entry entry = ranking.entries().get(i);
+            Color color = i == rankPlace ? Color.YELLOW : Color.WHITE;
+            int y = top + 26 + i * 22;
+            if (i == rankPlace) drawManager.drawSmallString(">", 24, y, color);
+            drawManager.drawSmallString(String.valueOf(i + 1), columns[0], y, color);
+            drawManager.drawSmallString(String.valueOf(entry.score), columns[1], y, color);
+            drawManager.drawSmallString(clock(entry.seconds), columns[2], y, color);
+            drawManager.drawSmallString(String.valueOf(entry.level), columns[3], y, color);
+        }
     }
 }
