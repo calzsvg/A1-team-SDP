@@ -28,7 +28,7 @@ public final class SurvivalTest {
     private static void select(SurvivalGame game, Upgrade target) {
         game.choose(game.choices().indexOf(target));
     }
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         for (ShipType type : ShipType.values()) {
             SurvivalGame ship = new SurvivalGame(448, 520, new Random(7), type);
             check(ship.shipType == type && ship.hp == 100, "Ship selection preserves Survival HP rules");
@@ -470,6 +470,33 @@ public final class SurvivalTest {
         check(game.strength() < 1.7, "Enemies are still under 1.7x power at four minutes");
         check(SurvivalGame.XP_BASE == 120 && SurvivalGame.XP_PER_LEVEL == 45, "Level-ups need more XP so upgrades come at a steady pace");
 
+        // Local ranking.
+        java.io.File temp = java.io.File.createTempFile("survival-ranking", ".txt");
+        try {
+            temp.delete();
+            engine.SurvivalRanking ranking = new engine.SurvivalRanking(temp);
+            check(ranking.entries().isEmpty(), "A missing ranking file gives an empty ranking");
+            check(ranking.record(500, 90, 3) == 0, "The first run takes first place");
+            check(ranking.record(900, 150, 5) == 0 && ranking.record(700, 120, 4) == 1, "Runs are ordered by score");
+            check(ranking.record(700, 100, 2) == 2, "A tied score ranks below the earlier run");
+            check(ranking.entries().get(1).seconds == 120 && ranking.entries().get(2).seconds == 100, "Tied runs keep their order");
+            engine.SurvivalRanking reloaded = new engine.SurvivalRanking(temp);
+            check(reloaded.entries().size() == 4 && reloaded.entries().get(0).score == 900
+                    && reloaded.entries().get(0).seconds == 150 && reloaded.entries().get(0).level == 5,
+                    "The ranking is saved and reloaded from the file");
+            for (int i = 0; i < 20; i++) ranking.record(1000 + i, 60, 2);
+            check(ranking.entries().size() == engine.SurvivalRanking.MAX_ENTRIES, "The ranking keeps only the best ten runs");
+            check(ranking.record(1, 5, 1) == -1 && ranking.entries().size() == engine.SurvivalRanking.MAX_ENTRIES,
+                    "A run that does not place returns -1 and is not stored");
+            boolean sorted = true;
+            for (int i = 1; i < ranking.entries().size(); i++)
+                sorted &= ranking.entries().get(i - 1).score >= ranking.entries().get(i).score;
+            check(sorted, "The ranking stays sorted by score");
+            java.nio.file.Files.write(temp.toPath(), java.util.Arrays.asList("300,60,2", "oops", "5,6", "-4,1,1", "800,200,6"));
+            reloaded = new engine.SurvivalRanking(temp);
+            check(reloaded.entries().size() == 2 && reloaded.entries().get(0).score == 800,
+                    "Damaged lines are skipped when loading");
+        } finally { temp.delete(); }
         System.out.println("SurvivalTest: " + checks + " checks passed");
     }
 }

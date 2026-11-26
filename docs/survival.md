@@ -25,7 +25,8 @@ Choose **Play > Survival**. Survive as long as possible; upgrades reset each run
 - The HUD shows HP (the bar turns yellow below 50% and red below 25%), kills and survival time at the top, with the level and XP bar below.
 - Score: each kill scores by enemy kind (grunt 10, mini 5, shooter 15, rusher 15, splitter 20, armored 25, elite 100, boss 500), plus 5 points per full second survived. Escaping enemies score nothing.
 - P or Escape pauses (also during a level-up choice). The pause menu offers **Resume**, **Retry**, **Game modes** and **Main menu**: choose with W/S or the arrows and Enter (or Space). P or Escape resumes.
-- At zero HP the result screen shows the score, with the points from survival time and from kills, and the level reached. Choose **Retry** or **Main menu** with W/S or the arrows and Enter (or Space). R retries and Escape returns to mode selection.
+- At zero HP the result screen shows the score, with the points from survival time and from kills, the level reached, bosses defeated and your place in the ranking. Choose **Retry**, **Ranking** or **Main menu** with W/S or the arrows and Enter (or Space). R retries and Escape returns to mode selection.
+- **Ranking:** every finished run is saved locally (score, time survived and level reached) in the `survival_ranking` file next to the game, which holds the best 10 runs by score; a run with an equal score ranks below the earlier one. The result screen shows your place ("NEW RANK #n") and the **Ranking** option opens the table with your run highlighted in yellow. The table is also available from **Game modes > Survival ranking**. The ranking is local only and upgrades are not saved between runs.
 
 Standalone checks (after compiling the game):
 

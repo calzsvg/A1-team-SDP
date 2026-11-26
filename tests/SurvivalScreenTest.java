@@ -41,6 +41,14 @@ public final class SurvivalScreenTest {
         Field buffer = DrawManager.class.getDeclaredField("backBuffer"); buffer.setAccessible(true);
         ImageIO.write((BufferedImage) buffer.get(null), "png", new File("bin/" + name + ".png"));
     }
+    /** Points the screen at a throwaway ranking file so tests never touch the player's saved ranking. */
+    private static SurvivalScreen isolate(SurvivalScreen screen) throws Exception {
+        Field field = SurvivalScreen.class.getDeclaredField("ranking"); field.setAccessible(true);
+        java.io.File temp = java.io.File.createTempFile("survival-ranking-test", ".txt");
+        temp.delete(); temp.deleteOnExit();
+        field.set(screen, new engine.SurvivalRanking(temp));
+        return screen;
+    }
     /** Simulate loadouts in memory only; never purchase or write the user's saves. */
     @SuppressWarnings("unchecked")
     private static void checkLoadouts(Frame frame) throws Exception {
@@ -62,7 +70,7 @@ public final class SurvivalScreenTest {
                     owned.put(ShopCatalog.findByRef(ShopCategory.SHIP, type.name()).getId(), 1);
                 selectedField.set(purchases, type);
                 shapes.remove(type);
-                SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+                SurvivalScreen screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
                 if (((SurvivalGame) GAME.get(screen)).shipType != type
                         || spriteField.get(screen) != type.getIdleSprite())
                     throw new AssertionError("Equipped ship must reach Survival: " + type);
@@ -75,7 +83,7 @@ public final class SurvivalScreenTest {
             Skin cosmetic = java.util.Arrays.stream(Skin.values()).filter(s -> s != Skin.CLASSIC).findFirst().get();
             owned.put(ShopCatalog.findByRef(ShopCategory.SKIN, cosmetic.name()).getId(), 1);
             skinField.set(purchases, cosmetic);
-            SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+            SurvivalScreen screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
             if (spriteField.get(screen) != shape.getSprite() || screenSkin.get(screen) != cosmetic)
                 throw new AssertionError("Equipped shape and color skin must reach Survival");
             Thread.sleep(1100); UPDATE.invoke(screen); capture("survival-equipped-cannon");
@@ -86,7 +94,7 @@ public final class SurvivalScreenTest {
             if (fresh == old || fresh.shipType != ShipType.BIG_BULLET || fresh.damage != 20)
                 throw new AssertionError("Retry must retain equipped ship and reset run upgrades");
             owned.remove(ShopCatalog.findByRef(ShopCategory.SHIP, ShipType.BIG_BULLET.name()).getId());
-            screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+            screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
             if (((SurvivalGame) GAME.get(screen)).shipType != ShipType.STANDARD)
                 throw new AssertionError("Locked ships must fall back to Standard");
         } finally {
@@ -99,7 +107,7 @@ public final class SurvivalScreenTest {
     private static void checkResultMenu(Frame frame) throws Exception {
         Field running = Screen.class.getDeclaredField("isRunning"); running.setAccessible(true);
         Field code = Screen.class.getDeclaredField("returnCode"); code.setAccessible(true);
-        SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        SurvivalScreen screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
         running.set(screen, true); // normally set by run()
         Thread.sleep(1100);
         SurvivalGame game = (SurvivalGame) GAME.get(screen);
@@ -110,10 +118,17 @@ public final class SurvivalScreenTest {
             throw new AssertionError("Retry is selected first and Enter restarts the run");
         fresh.hp = 0; UPDATE.invoke(screen);
         tap(frame, screen, KeyEvent.VK_DOWN); capture("survival-results-menu");
+        tap(frame, screen, KeyEvent.VK_ENTER); capture("survival-ranking-result");
+        if (!(Boolean) running.get(screen))
+            throw new AssertionError("Ranking opens inside the results and keeps the screen running");
+        tap(frame, screen, KeyEvent.VK_ESCAPE);
+        if (!(Boolean) running.get(screen))
+            throw new AssertionError("Escape on the ranking page goes back to the results");
+        tap(frame, screen, KeyEvent.VK_DOWN);
         tap(frame, screen, KeyEvent.VK_ENTER);
         if ((Boolean) running.get(screen) || (Integer) code.get(screen) != 1)
             throw new AssertionError("Main menu closes Survival and returns to the title screen");
-        screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
         running.set(screen, true);
         Thread.sleep(1100);
         game = (SurvivalGame) GAME.get(screen);
@@ -126,7 +141,7 @@ public final class SurvivalScreenTest {
     /** Opens a running Survival screen past its input delay. */
     private static SurvivalScreen open(Frame frame) throws Exception {
         Field running = Screen.class.getDeclaredField("isRunning"); running.setAccessible(true);
-        SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+        SurvivalScreen screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
         running.set(screen, true); // normally set by run()
         Thread.sleep(1100);
         return screen;
@@ -177,7 +192,7 @@ public final class SurvivalScreenTest {
         Frame frame = new Frame(448, 520);
         try {
             Core.getDrawManager().setFrame(frame);
-            SurvivalScreen screen = new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60);
+            SurvivalScreen screen = isolate(new SurvivalScreen(frame.getWidth(), frame.getHeight(), 60));
             Thread.sleep(1100);
             SurvivalGame game = (SurvivalGame) GAME.get(screen);
             for (int i = 0; i < 240; i++) { Thread.sleep(16); UPDATE.invoke(screen); }

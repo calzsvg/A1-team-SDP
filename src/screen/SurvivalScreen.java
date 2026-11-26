@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.event.KeyEvent;
 import java.util.Random;
 import engine.SurvivalGame;
+import engine.SurvivalRanking;
 import engine.PurchaseManager;
 import engine.DrawManager.SpriteType;
 import entity.Ship.ShipType;
@@ -22,8 +23,12 @@ public final class SurvivalScreen extends Screen {
     private boolean paused;
     private int selected;
     /** Result screen options, in display order. */
-    private static final int RETRY = 0, MAIN_MENU = 1;
+    private static final int RETRY = 0, RANKING = 1, MAIN_MENU = 2, RESULT_OPTIONS = 3;
     private int resultChoice = RETRY;
+    /** Local ranking; the finished run is recorded once, and rankPlace is its place (-1 if it did not place). */
+    private SurvivalRanking ranking = SurvivalRanking.local();
+    private boolean recorded, showRanking;
+    private int rankPlace = -1;
     /** Pause menu options, in display order. */
     private static final String[] PAUSE_OPTIONS = { "Resume", "Retry", "Game modes", "Main menu" };
     private static final int PAUSE_RESUME = 0, PAUSE_RETRY = 1, PAUSE_MODES = 2;
@@ -51,19 +56,27 @@ public final class SurvivalScreen extends Screen {
             if (paused) {
                 updatePauseMenu();
             } else if (game.isOver()) {
-                if (pressed(KeyEvent.VK_ESCAPE)) {
+                boolean confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
+                if (showRanking) {
+                    // The ranking page goes back to the results.
+                    if (pressed(KeyEvent.VK_ESCAPE) || confirm) showRanking = false;
+                } else if (pressed(KeyEvent.VK_ESCAPE)) {
                     isRunning = false;
                     return;
-                }
-                if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W)
-                        || pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S))
-                    resultChoice = resultChoice == RETRY ? MAIN_MENU : RETRY;
-                boolean confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
-                if (pressed(KeyEvent.VK_R) || (confirm && resultChoice == RETRY)) {
-                    retry();
-                } else if (confirm) {
-                    returnCode = 1;
-                    isRunning = false;
+                } else {
+                    if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W))
+                        resultChoice = (resultChoice + RESULT_OPTIONS - 1) % RESULT_OPTIONS;
+                    if (pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S))
+                        resultChoice = (resultChoice + 1) % RESULT_OPTIONS;
+                    confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
+                    if (pressed(KeyEvent.VK_R) || (confirm && resultChoice == RETRY)) {
+                        retry();
+                    } else if (confirm && resultChoice == RANKING) {
+                        showRanking = true;
+                    } else if (confirm) {
+                        returnCode = 1;
+                        isRunning = false;
+                    }
                 }
             } else if (pressed(KeyEvent.VK_ESCAPE)) {
                 // Escape pauses instead of quitting, so one key press can't end a run.
@@ -84,6 +97,7 @@ public final class SurvivalScreen extends Screen {
                         - (down(KeyEvent.VK_W) || down(KeyEvent.VK_UP) ? 1 : 0));
             }
         }
+        if (game.isOver()) recordRun();
         for (int i = 0; i < held.length; i++) held[i] = down(i);
         drawManager.initDrawing(this);
         draw();
@@ -111,8 +125,15 @@ public final class SurvivalScreen extends Screen {
         default: returnCode = 1; isRunning = false; break;
         }
     }
+    /** Saves the finished run to the local ranking, once. */
+    private void recordRun() {
+        if (recorded) return;
+        recorded = true;
+        rankPlace = ranking.record(game.score(), (int) game.elapsed, game.level);
+    }
     /** Starts a fresh run with the same equipped ship. */
     private void retry() {
+        recorded = false; showRanking = false; rankPlace = -1;
         game = new SurvivalGame(width, height, new Random(), shipType);
         paused = false;
         selected = 0;
@@ -204,17 +225,25 @@ public final class SurvivalScreen extends Screen {
         drawHud();
         drawBuffs();
 
-        if (game.isOver()) {
-            panel(100, height - 170);
+        if (game.isOver() && showRanking) {
+            panel(100, height - 150);
+            title("RANKING", 135);
+            SurvivalRankingScreen.drawTable(this, drawManager, ranking, rankPlace, 165);
+            drawManager.drawKeyHints(this, "enter/esc back to results");
+        } else if (game.isOver()) {
+            panel(100, height - 150);
             title("GAME OVER", 145);
             centered("SURVIVAL RESULTS", 175, Color.WHITE);
             drawManager.drawCenteredBigString(this, "SCORE " + game.score(), 222, Color.WHITE);
             // Each line shows the points it contributed to the score.
             centered("TIME " + time() + "   +" + game.timeScore(), 260, Color.WHITE);
             centered("KILLS " + game.kills + "   +" + game.killScore, 288, Color.WHITE);
-            centered("LEVEL " + game.level, 316, Color.GRAY);
-            drawManager.drawMenuRow(this, "Retry", 365, resultChoice == RETRY);
-            drawManager.drawMenuRow(this, "Main menu", 400, resultChoice == MAIN_MENU);
+            centered("LEVEL " + game.level + "   BOSSES " + game.bossKills, 316, Color.GRAY);
+            if (rankPlace >= 0) centered("NEW RANK #" + (rankPlace + 1), 342, Color.YELLOW);
+            else smallCentered("Not in the top " + SurvivalRanking.MAX_ENTRIES, 342, Color.GRAY);
+            drawManager.drawMenuRow(this, "Retry", 378, resultChoice == RETRY);
+            drawManager.drawMenuRow(this, "Ranking", 410, resultChoice == RANKING);
+            drawManager.drawMenuRow(this, "Main menu", 442, resultChoice == MAIN_MENU);
             drawManager.drawKeyHints(this, "w+s/arrows select, enter confirm, r retry, esc modes");
         } else if (paused) {
             drawManager.drawPauseMenu(this, PAUSE_OPTIONS, pauseChoice);
