@@ -146,7 +146,10 @@ public final class SurvivalScreen extends Screen {
         case SurvivalGame.ELITE: sprite = SpriteType.EnemyShipC2; color = new Color(255, 70, 70); break;
         default: sprite = SpriteType.EnemyShipA1; color = new Color(250, 92, 110); break;
         }
-        if (enemy.kind == SurvivalGame.ELITE)
+        if (enemy.kind == SurvivalGame.BOSS)
+            drawManager.drawSpriteScaled(SpriteType.FinalBoss1, (int) enemy.x - 36, (int) enemy.y - 24, 3,
+                    enemy.hp < enemy.maxHp / 2 ? new Color(255, 70, 70) : new Color(255, 150, 40));
+        else if (enemy.kind == SurvivalGame.ELITE)
             drawManager.drawSpriteScaled(sprite, (int) enemy.x - 18, (int) enemy.y - 12, 3, color);
         else if (enemy.kind == SurvivalGame.MINI)
             drawManager.drawSpriteScaled(sprite, (int) enemy.x - 8, (int) enemy.y - 6, 1, color);
@@ -181,8 +184,8 @@ public final class SurvivalScreen extends Screen {
         for (SurvivalGame.Enemy enemy : game.enemies) {
             drawEnemy(enemy);
             if (enemy.hp < enemy.maxHp) {
-                int half = enemy.kind == SurvivalGame.ELITE ? 20 : 14;
-                bar((int) enemy.x - half, (int) enemy.y - (half + 3), half * 2, enemy.hp / enemy.maxHp, Color.GREEN);
+                int half = enemy.kind == SurvivalGame.BOSS ? 36 : enemy.kind == SurvivalGame.ELITE ? 20 : 14;
+                bar((int) enemy.x - half, (int) enemy.y - (enemy.kind == SurvivalGame.BOSS ? 30 : half + 3), half * 2, enemy.hp / enemy.maxHp, Color.GREEN);
             }
         }
         for (SurvivalGame.Shot shot : game.shots) {
@@ -229,6 +232,8 @@ public final class SurvivalScreen extends Screen {
             drawManager.drawKeyHints(this, "1/2/3 select, w+s/arrows move, enter confirm");
         } else {
             smallCentered("wasd/arrows move, auto fire, p/esc pause", height - 10, Color.GRAY);
+            if (game.bossWarning > 0)
+                smallCentered("WARNING - BOSS APPROACHING", 106, Color.RED);
             if (game.elapsed < 6) {
                 smallCentered("Destroy enemies before they reach the bottom", 106, Color.WHITE);
                 smallCentered("Kills grant XP. Collect + drops to repair HP.", 123, Color.GRAY);

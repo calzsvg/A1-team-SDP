@@ -410,6 +410,60 @@ public final class SurvivalTest {
         }
         check(game.elapsed > 180 && game.kills > 0 && game.level > 1, "Sustained run progresses");
 
+        // Boss enemies.
+        game = game(); game.hp = game.maxHp = 100000;
+        game.elapsed = SurvivalGame.BOSS_FIRST_SECONDS - .06;
+        game.update(.05, 0, 0);
+        check(!game.bossAlive() && game.bossesSpawned == 0, "No boss before the first boss time");
+        game.update(.05, 0, 0);
+        check(game.bossAlive() && game.bossesSpawned == 1 && game.bossWarning > 0, "A boss arrives at 2:00 with a warning");
+        Enemy boss = null;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.BOSS) boss = e;
+        double firstHp = boss.maxHp;
+        check(firstHp >= 600, "The boss is far tougher than an elite");
+        for (int i = 0; i < 400; i++) game.update(.05, 0, 0);
+        check(game.enemies.contains(boss) && boss.y == SurvivalGame.BOSS_HOLD_Y, "The boss stops at its hold line and never escapes");
+        boolean bossShot = false;
+        game.shots.clear();
+        for (int i = 0; i < 60 && !bossShot; i++) {
+            game.update(.05, 0, 0);
+            int spread = 0;
+            for (Shot shot : game.shots) if (shot.hostile && shot.y < 300) spread++;
+            bossShot = spread >= 5;
+        }
+        check(bossShot, "The boss fires a five-way spread");
+        double sweep = boss.x;
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        check(boss.x != sweep, "The boss sweeps side to side");
+        game.hp = 100000; game.y = boss.y = SurvivalGame.BOSS_HOLD_Y;
+        game.x = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin((game.elapsed + .016) * .5);
+        game.update(.016, 0, 0);
+        check(game.enemies.contains(boss) && game.hp < 100000, "Touching the boss hurts but does not remove it");
+        game = game(); game.elapsed = SurvivalGame.BOSS_FIRST_SECONDS + SurvivalGame.BOSS_SECONDS - .01;
+        game.hp = game.maxHp = 100000; game.update(.05, 0, 0); game.update(.05, 0, 0);
+        check(game.bossesSpawned == 2, "Another boss arrives every two minutes");
+        double secondHp = 0;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.BOSS) secondHp = Math.max(secondHp, e.maxHp);
+        check(secondHp > firstHp, "Later bosses have more health");
+        game = game(); game.hp = game.maxHp = 100000;
+        double bossX = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin(.016 * .5);
+        Enemy bossTarget = new Enemy(bossX, 200, SurvivalGame.BOSS, 100, 0);
+        game.enemies.add(bossTarget);
+        game.pickups.clear();
+        game.shots.add(new Shot(bossX, 200, 0, 0, 1000, false));
+        int scoreBefore = game.killScore;
+        game.update(.016, 0, 0);
+        check(game.bossKills == 1 && game.kills == 1 && game.killScore - scoreBefore == 500,
+                "Killing a boss counts it and is worth 500 points");
+        check(game.pickups.size() == 2 && game.repairs.size() == 1, "A boss drops two pickups and a repair kit");
+        check(game.xp + (game.level - 1) * SurvivalGame.XP_BASE >= 200 || game.level > 1, "A boss grants a large amount of XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        Enemy tough = new Enemy(60, 200, SurvivalGame.BOSS, 500, 0);
+        game.enemies.add(tough);
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.BOMB));
+        game.update(.016, 0, 0);
+        check(tough.hp == 500 - SurvivalGame.BOMB_ELITE_DAMAGE, "A bomb hurts a boss instead of destroying it");
+
         // Easier pacing for longer runs.
         check(SurvivalGame.spawnInterval(120) > .7, "Spawning stays relaxed through the first two minutes");
         game = game(); game.elapsed = 240;
