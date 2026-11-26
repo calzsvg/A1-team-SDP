@@ -31,13 +31,13 @@ public final class SurvivalGame {
     public static final int GRUNT = 0, ARMORED = 1, SHOOTER = 2, RUSHER = 3,
             SPLITTER = 4, ELITE = 5, MINI = 6;
     /** Seconds between difficulty tiers, and between elite arrivals. */
-    public static final double TIER_SECONDS = 30, ELITE_SECONDS = 60;
+    public static final double TIER_SECONDS = 45, ELITE_SECONDS = 75;
     /** Enemy power is 1 at the start and grows by 1 every STRENGTH_SECONDS. */
-    public static final double STRENGTH_SECONDS = 240;
-    /** Spawn interval starts at 0.85 s and shrinks by 0.5% per second, never below MIN_SPAWN_INTERVAL. */
-    public static final double START_SPAWN_INTERVAL = .85, MIN_SPAWN_INTERVAL = .15;
+    public static final double STRENGTH_SECONDS = 420;
+    /** Spawn interval starts at 0.95 s and shrinks by 0.2% per second, never below MIN_SPAWN_INTERVAL. */
+    public static final double START_SPAWN_INTERVAL = .95, MIN_SPAWN_INTERVAL = .22;
     public static double spawnInterval(double elapsed) {
-        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.997, elapsed));
+        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.998, elapsed));
     }
     /** Enemy strength multiplier at the current time. */
     public double strength() { return 1 + elapsed / STRENGTH_SECONDS; }
@@ -131,7 +131,7 @@ public final class SurvivalGame {
         x = width / 2.0; y = height - 75;
     }
     /** XP needed for the next level: the first level costs XP_BASE, each later one XP_PER_LEVEL more. */
-    public static final int XP_BASE = 100, XP_PER_LEVEL = 35;
+    public static final int XP_BASE = 120, XP_PER_LEVEL = 45;
     public int xpRequired() { return XP_BASE + (level - 1) * XP_PER_LEVEL; }
     public boolean isOver() { return hp <= 0; }
     /** Difficulty tier of the run: rises by one every {@link #TIER_SECONDS}. */
@@ -165,11 +165,11 @@ public final class SurvivalGame {
     public int timeScore() { return (int) elapsed * POINTS_PER_SECOND; }
     /** Run score: kill points plus survival time points. */
     public int score() { return killScore + timeScore(); }
-    /** Which kinds can appear: the pool widens at 20 s, 45 s and 90 s. */
+    /** Which kinds can appear: the pool widens at 30 s, 60 s and 120 s. */
     private int pickKind() {
-        if (elapsed < 20) return random.nextInt(2);
-        if (elapsed < 45) return random.nextInt(3);
-        if (elapsed < 90) return random.nextInt(4);
+        if (elapsed < 30) return random.nextInt(2);
+        if (elapsed < 60) return random.nextInt(3);
+        if (elapsed < 120) return random.nextInt(4);
         return random.nextInt(5);
     }
     private Enemy newEnemy(int kind, double x, double y) {
