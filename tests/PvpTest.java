@@ -74,10 +74,14 @@ public final class PvpTest {
         for (int i = 0; i < 200; i++) match.tick(PvpMatch.RIGHT, PvpMatch.RIGHT);
         check(match.x[0] == 374 && match.x[1] == 0, "Arena boundaries");
         match.x[0] = match.x[1] = 187;
-        for (int i = 0; i < 600 && match.phase != PvpMatch.FINISHED; i++)
+        for (int i = 0; i < 600 && match.phase == PvpMatch.PLAYING; i++)
             match.tick(PvpMatch.FIRE, 0);
-        check(match.phase == PvpMatch.FINISHED && match.winner == 0 && match.hp[1] == 0,
-                "Bullets, damage and authoritative win");
+        check(match.phase == PvpMatch.ROUND_OVER && match.winner == 0 && match.hp[1] == 0
+                && match.wins[0] == 1, "Bullets, damage and authoritative round win");
+        for (int i = 0; i < 3000 && match.phase != PvpMatch.FINISHED; i++)
+            match.tick(PvpMatch.FIRE, 0);
+        check(match.phase == PvpMatch.FINISHED && match.winner == 0 && match.wins[0] == 3,
+                "Series ends after three round wins");
         int hp = match.hp[0]; match.tick(0, PvpMatch.FIRE);
         check(match.hp[0] == hp, "Finished arena does not advance");
         PvpMatch draw = new PvpMatch(); draw.phase = PvpMatch.PLAYING;
@@ -85,12 +89,13 @@ public final class PvpTest {
         draw.shots.add(new PvpMatch.Shot(0, 190, draw.y[1] + 6));
         draw.shots.add(new PvpMatch.Shot(1, 190, draw.y[0] - 6));
         draw.tick(0, 0);
-        check(draw.phase == PvpMatch.FINISHED && draw.winner == -1, "Simultaneous hit draws");
+        check(draw.phase == PvpMatch.ROUND_OVER && draw.winner == -1
+                && draw.wins[0] == 0 && draw.wins[1] == 0, "Simultaneous hit draws the round");
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         PvpProtocol.write(new DataOutputStream(bytes), PvpProtocol.capture(match, 2));
         PvpProtocol.State decoded = PvpProtocol.read(new DataInputStream(
                 new ByteArrayInputStream(bytes.toByteArray())));
-        check(decoded.winner == 0 && decoded.hp[1] == 0, "State protocol roundtrip");
+        check(decoded.winner == 0 && decoded.wins[0] == 3, "State protocol roundtrip");
         byte[] invalid = bytes.toByteArray(); invalid[3] = 99;
         boolean rejected = false;
         try { PvpProtocol.read(new DataInputStream(new ByteArrayInputStream(invalid))); }

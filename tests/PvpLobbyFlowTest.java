@@ -17,7 +17,7 @@ public final class PvpLobbyFlowTest {
         if (!condition) throw new AssertionError(message);
     }
     private static void await(BooleanSupplier condition, String message) throws Exception {
-        long deadline = System.nanoTime() + 8000000000L;
+        long deadline = System.nanoTime() + 30000000000L;
         while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(10);
         check(condition.getAsBoolean(), message);
     }
@@ -52,8 +52,10 @@ public final class PvpLobbyFlowTest {
             check(first.getState().shots.length == 0, "Lobby readiness does not fire a shot");
             ((PvpClient) connection.get(match)).setInput(PvpMatch.FIRE);
             await(() -> first.getState().phase == PvpMatch.FINISHED
-                    && second.getState().phase == PvpMatch.FINISHED, "Original room finishes after handoff");
-            check(first.getState().winner == first.getPlayer(), "Shared match client can play to victory");
+                    && second.getState().phase == PvpMatch.FINISHED, "Original room finishes the series after handoff");
+            check(first.getState().winner == first.getPlayer()
+                    && first.getState().wins[first.getPlayer()] == PvpMatch.WINS_NEEDED,
+                    "Shared match client can win the best-of-five series");
             first.close();
             await(() -> second.isClosed(), "Closing session disconnects opponent");
         } finally {

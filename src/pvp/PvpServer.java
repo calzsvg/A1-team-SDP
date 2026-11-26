@@ -90,7 +90,7 @@ public final class PvpServer implements AutoCloseable {
                     try {
                         while (!closed) {
                             int value = in.readUnsignedByte();
-                            if ((value & ~15) != 0) throw new IOException("Invalid input");
+                            if ((value & ~PvpMatch.INPUT_MASK) != 0) throw new IOException("Invalid input");
                             input = value;
                         }
                     } catch (IOException e) { close(); }
@@ -138,9 +138,9 @@ public final class PvpServer implements AutoCloseable {
                     long tickStart = System.nanoTime();
                     synchronized (this) {
                         for (int p = 0; p < count; p++) if (peers[p].closed) return;
-                        // Waiting rooms expire after two minutes; full sessions after ten.
+                        // Waiting rooms expire after two minutes; full sessions after fifteen.
                         long age = tickStart - started;
-                        if (age > 600000000000L
+                        if (age > 900000000000L
                                 || (match.phase == PvpMatch.WAITING && age > 120000000000L)) return;
                         if (count == 2) match.tick(peers[0].input, peers[1].input);
                         PvpProtocol.State s = PvpProtocol.capture(match, count);
