@@ -50,6 +50,8 @@ public final class SurvivalGame {
         double fireClock = 1.5;
         /** Strength multiplier fixed when the enemy spawns; scales its damage and the XP it grants. */
         public double power = 1;
+        /** Seconds this boss has spent sweeping; each boss keeps its own clock so it starts from the center. */
+        public double sweep;
         public Enemy(double x, double y, int kind, double hp, double speed) {
             this.x = x; this.y = y; this.kind = kind;
             this.hp = hp; this.maxHp = hp; this.speed = speed;
@@ -251,7 +253,10 @@ public final class SurvivalGame {
             if (enemy.kind == BOSS) {
                 // Bosses descend to a hold line, then sweep side to side for the rest of the fight.
                 if (enemy.y < BOSS_HOLD_Y) enemy.y = Math.min(BOSS_HOLD_Y, enemy.y + enemy.speed * dt);
-                else enemy.x = width / 2.0 + (width / 2.0 - 60) * Math.sin(elapsed * .5);
+                else {
+                    enemy.sweep += dt;
+                    enemy.x = width / 2.0 + (width / 2.0 - 60) * Math.sin(enemy.sweep * .5);
+                }
             } else enemy.y += enemy.speed * dt;
             if (enemy.kind == RUSHER) {
                 // Rushers slide toward the player's column while they fall.
@@ -285,8 +290,10 @@ public final class SurvivalGame {
                 hurt(shot.damage); removed = true;
             } else if (!removed && !shot.hostile) {
                 for (Enemy enemy : enemies) {
-                    if (enemy.hp > 0 && Math.abs(shot.x - enemy.x) < 14 + shot.width / 2.0
-                            && Math.abs(shot.y - enemy.y) < 12 + shot.height / 2.0) {
+                    // The boss is drawn much larger than other enemies, so its hit box is too.
+                    double halfW = enemy.kind == BOSS ? 36 : 14, halfH = enemy.kind == BOSS ? 24 : 12;
+                    if (enemy.hp > 0 && Math.abs(shot.x - enemy.x) < halfW + shot.width / 2.0
+                            && Math.abs(shot.y - enemy.y) < halfH + shot.height / 2.0) {
                         double hit = shot.damage * (critChance > 0 && random.nextDouble() < critChance ? 2 : 1);
                         double dealt = Math.min(enemy.hp, hit);
                         enemy.hp -= hit; heal(dealt * lifesteal); removed = true;

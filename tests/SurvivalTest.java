@@ -436,7 +436,7 @@ public final class SurvivalTest {
         for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
         check(boss.x != sweep, "The boss sweeps side to side");
         game.hp = 100000; game.y = boss.y = SurvivalGame.BOSS_HOLD_Y;
-        game.x = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin((game.elapsed + .016) * .5);
+        game.x = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin((boss.sweep + .016) * .5);
         game.update(.016, 0, 0);
         check(game.enemies.contains(boss) && game.hp < 100000, "Touching the boss hurts but does not remove it");
         game = game(); game.elapsed = SurvivalGame.BOSS_FIRST_SECONDS + SurvivalGame.BOSS_SECONDS - .01;
@@ -464,6 +464,31 @@ public final class SurvivalTest {
         game.update(.016, 0, 0);
         check(tough.hp == 500 - SurvivalGame.BOMB_ELITE_DAMAGE, "A bomb hurts a boss instead of destroying it");
 
+
+        // Boss sweep clock and hit box.
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 500;
+        Enemy lateBoss = new Enemy(game.width / 2.0, SurvivalGame.BOSS_HOLD_Y, SurvivalGame.BOSS, 100000, 40);
+        game.enemies.add(lateBoss);
+        game.update(.05, 0, 0);
+        check(Math.abs(lateBoss.x - game.width / 2.0) < 10, "A boss starts sweeping from the center, whatever the run time");
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        Enemy second = new Enemy(game.width / 2.0, SurvivalGame.BOSS_HOLD_Y, SurvivalGame.BOSS, 100000, 40);
+        game.enemies.add(second);
+        for (int i = 0; i < 10; i++) game.update(.05, 0, 0);
+        check(Math.abs(lateBoss.x - second.x) > 20, "Two bosses sweep out of step instead of overlapping");
+        game = game(); game.hp = game.maxHp = 100000;
+        Enemy wide = new Enemy(game.width / 2.0, 200, SurvivalGame.BOSS, 100000, 0);
+        game.enemies.add(wide);
+        double wingX = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin(.016 * .5) + 33;
+        game.shots.add(new Shot(wingX, 200, 0, 0, 10, false));
+        game.update(.016, 0, 0);
+        check(wide.hp == 100000 - 10, "Shots hitting the boss's wing connect");
+        game = game();
+        Enemy grunt = new Enemy(game.width / 2.0, 200, SurvivalGame.GRUNT, 100, 0);
+        game.enemies.add(grunt);
+        game.shots.add(new Shot(game.width / 2.0 + 33, 200, 0, 0, 10, false));
+        game.update(.016, 0, 0);
+        check(grunt.hp == 100, "Other enemies keep their small hit box");
         // Easier pacing for longer runs.
         check(SurvivalGame.spawnInterval(120) > .7, "Spawning stays relaxed through the first two minutes");
         game = game(); game.elapsed = 240;
