@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.event.KeyEvent;
 import java.util.Random;
 import engine.SurvivalGame;
+import engine.SurvivalRanking;
 import engine.PurchaseManager;
 import engine.DrawManager.SpriteType;
 import entity.Ship.ShipType;
@@ -22,8 +23,12 @@ public final class SurvivalScreen extends Screen {
     private boolean paused;
     private int selected;
     /** Result screen options, in display order. */
-    private static final int RETRY = 0, MAIN_MENU = 1;
+    private static final int RETRY = 0, RANKING = 1, MAIN_MENU = 2, RESULT_OPTIONS = 3;
     private int resultChoice = RETRY;
+    /** Local ranking; the finished run is recorded once, and rankPlace is its place (-1 if it did not place). */
+    private SurvivalRanking ranking = SurvivalRanking.local();
+    private boolean recorded, showRanking;
+    private int rankPlace = -1;
     /** Pause menu options, in display order. */
     private static final String[] PAUSE_OPTIONS = { "Resume", "Retry", "Game modes", "Main menu" };
     private static final int PAUSE_RESUME = 0, PAUSE_RETRY = 1, PAUSE_MODES = 2;
@@ -51,19 +56,27 @@ public final class SurvivalScreen extends Screen {
             if (paused) {
                 updatePauseMenu();
             } else if (game.isOver()) {
-                if (pressed(KeyEvent.VK_ESCAPE)) {
+                boolean confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
+                if (showRanking) {
+                    // The ranking page goes back to the results.
+                    if (pressed(KeyEvent.VK_ESCAPE) || confirm) showRanking = false;
+                } else if (pressed(KeyEvent.VK_ESCAPE)) {
                     isRunning = false;
                     return;
-                }
-                if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W)
-                        || pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S))
-                    resultChoice = resultChoice == RETRY ? MAIN_MENU : RETRY;
-                boolean confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
-                if (pressed(KeyEvent.VK_R) || (confirm && resultChoice == RETRY)) {
-                    retry();
-                } else if (confirm) {
-                    returnCode = 1;
-                    isRunning = false;
+                } else {
+                    if (pressed(KeyEvent.VK_UP) || pressed(KeyEvent.VK_W))
+                        resultChoice = (resultChoice + RESULT_OPTIONS - 1) % RESULT_OPTIONS;
+                    if (pressed(KeyEvent.VK_DOWN) || pressed(KeyEvent.VK_S))
+                        resultChoice = (resultChoice + 1) % RESULT_OPTIONS;
+                    confirm = pressed(KeyEvent.VK_ENTER) || pressed(KeyEvent.VK_SPACE);
+                    if (pressed(KeyEvent.VK_R) || (confirm && resultChoice == RETRY)) {
+                        retry();
+                    } else if (confirm && resultChoice == RANKING) {
+                        showRanking = true;
+                    } else if (confirm) {
+                        returnCode = 1;
+                        isRunning = false;
+                    }
                 }
             } else if (pressed(KeyEvent.VK_ESCAPE)) {
                 // Escape pauses instead of quitting, so one key press can't end a run.
@@ -84,6 +97,7 @@ public final class SurvivalScreen extends Screen {
                         - (down(KeyEvent.VK_W) || down(KeyEvent.VK_UP) ? 1 : 0));
             }
         }
+        if (game.isOver()) recordRun();
         for (int i = 0; i < held.length; i++) held[i] = down(i);
         drawManager.initDrawing(this);
         draw();
@@ -111,8 +125,15 @@ public final class SurvivalScreen extends Screen {
         default: returnCode = 1; isRunning = false; break;
         }
     }
+    /** Saves the finished run to the local ranking, once. */
+    private void recordRun() {
+        if (recorded) return;
+        recorded = true;
+        rankPlace = ranking.record(game.score(), (int) game.elapsed, game.level);
+    }
     /** Starts a fresh run with the same equipped ship. */
     private void retry() {
+        recorded = false; showRanking = false; rankPlace = -1;
         game = new SurvivalGame(width, height, new Random(), shipType);
         paused = false;
         selected = 0;
@@ -146,7 +167,10 @@ public final class SurvivalScreen extends Screen {
         case SurvivalGame.ELITE: sprite = SpriteType.EnemyShipC2; color = new Color(255, 70, 70); break;
         default: sprite = SpriteType.EnemyShipA1; color = new Color(250, 92, 110); break;
         }
-        if (enemy.kind == SurvivalGame.ELITE)
+        if (enemy.kind == SurvivalGame.BOSS)
+            drawManager.drawSpriteScaled(SpriteType.FinalBoss1, (int) enemy.x - 36, (int) enemy.y - 24, 3,
+                    enemy.hp < enemy.maxHp / 2 ? new Color(255, 70, 70) : new Color(255, 150, 40));
+        else if (enemy.kind == SurvivalGame.ELITE)
             drawManager.drawSpriteScaled(sprite, (int) enemy.x - 18, (int) enemy.y - 12, 3, color);
         else if (enemy.kind == SurvivalGame.MINI)
             drawManager.drawSpriteScaled(sprite, (int) enemy.x - 8, (int) enemy.y - 6, 1, color);
@@ -181,8 +205,8 @@ public final class SurvivalScreen extends Screen {
         for (SurvivalGame.Enemy enemy : game.enemies) {
             drawEnemy(enemy);
             if (enemy.hp < enemy.maxHp) {
-                int half = enemy.kind == SurvivalGame.ELITE ? 20 : 14;
-                bar((int) enemy.x - half, (int) enemy.y - (half + 3), half * 2, enemy.hp / enemy.maxHp, Color.GREEN);
+                int half = enemy.kind == SurvivalGame.BOSS ? 36 : enemy.kind == SurvivalGame.ELITE ? 20 : 14;
+                bar((int) enemy.x - half, (int) enemy.y - (enemy.kind == SurvivalGame.BOSS ? 30 : half + 3), half * 2, enemy.hp / enemy.maxHp, Color.GREEN);
             }
         }
         for (SurvivalGame.Shot shot : game.shots) {
@@ -201,17 +225,25 @@ public final class SurvivalScreen extends Screen {
         drawHud();
         drawBuffs();
 
-        if (game.isOver()) {
-            panel(100, height - 170);
+        if (game.isOver() && showRanking) {
+            panel(100, height - 150);
+            title("RANKING", 135);
+            drawTable(165);
+            drawManager.drawKeyHints(this, "enter/esc back to results");
+        } else if (game.isOver()) {
+            panel(100, height - 150);
             title("GAME OVER", 145);
             centered("SURVIVAL RESULTS", 175, Color.WHITE);
             drawManager.drawCenteredBigString(this, "SCORE " + game.score(), 222, Color.WHITE);
             // Each line shows the points it contributed to the score.
             centered("TIME " + time() + "   +" + game.timeScore(), 260, Color.WHITE);
             centered("KILLS " + game.kills + "   +" + game.killScore, 288, Color.WHITE);
-            centered("LEVEL " + game.level, 316, Color.GRAY);
-            drawManager.drawMenuRow(this, "Retry", 365, resultChoice == RETRY);
-            drawManager.drawMenuRow(this, "Main menu", 400, resultChoice == MAIN_MENU);
+            centered("LEVEL " + game.level + "   BOSSES " + game.bossKills, 316, Color.GRAY);
+            if (rankPlace >= 0) centered("NEW RANK #" + (rankPlace + 1), 342, Color.YELLOW);
+            else smallCentered("Not in the top " + SurvivalRanking.MAX_ENTRIES, 342, Color.GRAY);
+            drawManager.drawMenuRow(this, "Retry", 378, resultChoice == RETRY);
+            drawManager.drawMenuRow(this, "Ranking", 410, resultChoice == RANKING);
+            drawManager.drawMenuRow(this, "Main menu", 442, resultChoice == MAIN_MENU);
             drawManager.drawKeyHints(this, "w+s/arrows select, enter confirm, r retry, esc modes");
         } else if (paused) {
             drawManager.drawPauseMenu(this, PAUSE_OPTIONS, pauseChoice);
@@ -229,6 +261,8 @@ public final class SurvivalScreen extends Screen {
             drawManager.drawKeyHints(this, "1/2/3 select, w+s/arrows move, enter confirm");
         } else {
             smallCentered("wasd/arrows move, auto fire, p/esc pause", height - 10, Color.GRAY);
+            if (game.bossWarning > 0)
+                smallCentered("WARNING - BOSS APPROACHING", 106, Color.RED);
             if (game.elapsed < 6) {
                 smallCentered("Destroy enemies before they reach the bottom", 106, Color.WHITE);
                 smallCentered("Kills grant XP. Collect + drops to repair HP.", 123, Color.GRAY);
@@ -266,5 +300,34 @@ public final class SurvivalScreen extends Screen {
         int panelWidth = width - 32;
         drawManager.fillBox(16, top, panelWidth, panelHeight, Color.BLACK);
         drawManager.drawBox(16, top, panelWidth, panelHeight, Color.GREEN);
+    }
+    /** "mm:ss" for a number of seconds. */
+    private static String clock(int seconds) {
+        return String.format("%02d:%02d", seconds / 60, seconds % 60);
+    }
+    /**
+     * Draws the ranking table starting at the given y; the row at {@code highlight} (zero-based, or -1 for none)
+     * is drawn in yellow with a marker so the player can find their own run.
+     */
+    private void drawTable(int top) {
+        int[] columns = { 40, 90, 215, 310 };
+        String[] heads = { "#", "SCORE", "TIME", "LEVEL" };
+        for (int c = 0; c < heads.length; c++) drawManager.drawSmallString(heads[c], columns[c], top, Color.GRAY);
+        drawManager.fillBox(24, top + 6, width - 48, 1, Color.GREEN);
+        if (ranking.entries().isEmpty()) {
+            String none = "No runs yet";
+            drawManager.drawSmallString(none, (width - drawManager.getSmallStringWidth(none)) / 2, top + 50, Color.GRAY);
+            return;
+        }
+        for (int i = 0; i < ranking.entries().size(); i++) {
+            SurvivalRanking.Entry entry = ranking.entries().get(i);
+            Color color = i == rankPlace ? Color.YELLOW : Color.WHITE;
+            int y = top + 26 + i * 22;
+            if (i == rankPlace) drawManager.drawSmallString(">", 24, y, color);
+            drawManager.drawSmallString(String.valueOf(i + 1), columns[0], y, color);
+            drawManager.drawSmallString(String.valueOf(entry.score), columns[1], y, color);
+            drawManager.drawSmallString(clock(entry.seconds), columns[2], y, color);
+            drawManager.drawSmallString(String.valueOf(entry.level), columns[3], y, color);
+        }
     }
 }

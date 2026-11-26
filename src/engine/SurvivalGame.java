@@ -29,15 +29,17 @@ public final class SurvivalGame {
     }
     /** Enemy kinds. 0-2 are the original types; the rest unlock as the run goes on. */
     public static final int GRUNT = 0, ARMORED = 1, SHOOTER = 2, RUSHER = 3,
-            SPLITTER = 4, ELITE = 5, MINI = 6;
+            SPLITTER = 4, ELITE = 5, MINI = 6, BOSS = 7;
     /** Seconds between difficulty tiers, and between elite arrivals. */
-    public static final double TIER_SECONDS = 30, ELITE_SECONDS = 60;
+    public static final double TIER_SECONDS = 45, ELITE_SECONDS = 75;
+    /** The first boss arrives at BOSS_FIRST_SECONDS, then another every BOSS_SECONDS. */
+    public static final double BOSS_FIRST_SECONDS = 120, BOSS_SECONDS = 120;
     /** Enemy power is 1 at the start and grows by 1 every STRENGTH_SECONDS. */
-    public static final double STRENGTH_SECONDS = 240;
-    /** Spawn interval starts at 0.85 s and shrinks by 0.5% per second, never below MIN_SPAWN_INTERVAL. */
-    public static final double START_SPAWN_INTERVAL = .85, MIN_SPAWN_INTERVAL = .15;
+    public static final double STRENGTH_SECONDS = 420;
+    /** Spawn interval starts at 0.95 s and shrinks by 0.2% per second, never below MIN_SPAWN_INTERVAL. */
+    public static final double START_SPAWN_INTERVAL = .95, MIN_SPAWN_INTERVAL = .22;
     public static double spawnInterval(double elapsed) {
-        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.997, elapsed));
+        return Math.max(MIN_SPAWN_INTERVAL, START_SPAWN_INTERVAL * Math.pow(.998, elapsed));
     }
     /** Enemy strength multiplier at the current time. */
     public double strength() { return 1 + elapsed / STRENGTH_SECONDS; }
@@ -48,6 +50,8 @@ public final class SurvivalGame {
         double fireClock = 1.5;
         /** Strength multiplier fixed when the enemy spawns; scales its damage and the XP it grants. */
         public double power = 1;
+        /** Seconds this boss has spent sweeping; each boss keeps its own clock so it starts from the center. */
+        public double sweep;
         public Enemy(double x, double y, int kind, double hp, double speed) {
             this.x = x; this.y = y; this.kind = kind;
             this.hp = hp; this.maxHp = hp; this.speed = speed;
@@ -111,9 +115,14 @@ public final class SurvivalGame {
     /** Seconds left on each timed pickup effect. */
     public double shield, magnet, doubleXp, rapid;
     public int level = 1, xp, kills, projectiles = 1;
+    /** Bosses that have arrived and bosses that have been destroyed this run. */
+    public int bossesSpawned, bossKills;
+    /** Seconds left on the on-screen warning shown when a boss arrives. */
+    public double bossWarning;
     /** Points earned from kills; see {@link #score()} for the run total. */
     public int killScore;
-    private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS;
+    private double spawnClock = .5, shotClock, contactGrace, nextElite = ELITE_SECONDS,
+            nextBoss = BOSS_FIRST_SECONDS;
     public SurvivalGame(int width, int height, Random random) {
         this(width, height, random, ShipType.STANDARD);
     }
@@ -131,7 +140,7 @@ public final class SurvivalGame {
         x = width / 2.0; y = height - 75;
     }
     /** XP needed for the next level: the first level costs XP_BASE, each later one XP_PER_LEVEL more. */
-    public static final int XP_BASE = 100, XP_PER_LEVEL = 35;
+    public static final int XP_BASE = 120, XP_PER_LEVEL = 45;
     public int xpRequired() { return XP_BASE + (level - 1) * XP_PER_LEVEL; }
     public boolean isOver() { return hp <= 0; }
     /** Difficulty tier of the run: rises by one every {@link #TIER_SECONDS}. */
@@ -143,6 +152,7 @@ public final class SurvivalGame {
         case RUSHER: return 8;
         case SPLITTER: return 12;
         case ELITE: return 60;
+        case BOSS: return 200;
         case MINI: return 2;
         default: return 6;
         }
@@ -157,6 +167,7 @@ public final class SurvivalGame {
         case RUSHER: return 15;
         case SPLITTER: return 20;
         case ELITE: return 100;
+        case BOSS: return 500;
         case MINI: return 5;
         default: return 10;
         }
@@ -165,11 +176,11 @@ public final class SurvivalGame {
     public int timeScore() { return (int) elapsed * POINTS_PER_SECOND; }
     /** Run score: kill points plus survival time points. */
     public int score() { return killScore + timeScore(); }
-    /** Which kinds can appear: the pool widens at 20 s, 45 s and 90 s. */
+    /** Which kinds can appear: the pool widens at 30 s, 60 s and 120 s. */
     private int pickKind() {
-        if (elapsed < 20) return random.nextInt(2);
-        if (elapsed < 45) return random.nextInt(3);
-        if (elapsed < 90) return random.nextInt(4);
+        if (elapsed < 30) return random.nextInt(2);
+        if (elapsed < 60) return random.nextInt(3);
+        if (elapsed < 120) return random.nextInt(4);
         return random.nextInt(5);
     }
     private Enemy newEnemy(int kind, double x, double y) {
@@ -181,11 +192,18 @@ public final class SurvivalGame {
         case SPLITTER: hp = 36 + tier * 8; speed = 40 + Math.min(40, elapsed * .15); break;
         case ELITE: hp = 220 + tier * 60; speed = 26; break;
         case MINI: hp = 8 + tier * 2; speed = 80; break;
+        case BOSS: hp = 600 + bossesSpawned * 250 + tier * 20; speed = 40; break;
         default: hp = 18 + tier * 8; speed = 48 + Math.min(65, elapsed * .22); break;
         }
         Enemy enemy = new Enemy(x, y, kind, hp, speed);
         enemy.power = strength();
         return enemy;
+    }
+    /** Y position where a boss stops descending and starts to strafe. */
+    public static final double BOSS_HOLD_Y = 115;
+    public boolean bossAlive() {
+        for (Enemy enemy : enemies) if (enemy.kind == BOSS && enemy.hp > 0) return true;
+        return false;
     }
     public List<Upgrade> choices() { return Collections.unmodifiableList(choices); }
     public void update(double dt, double dx, double dy) {
@@ -198,6 +216,7 @@ public final class SurvivalGame {
         doubleXp = Math.max(0, doubleXp - dt);
         rapid = Math.max(0, rapid - dt);
         contactGrace = Math.max(0, contactGrace - dt);
+        bossWarning = Math.max(0, bossWarning - dt);
         double length = Math.max(1, Math.hypot(dx, dy));
         x = Math.max(16, Math.min(width - 16, x + dx / length * moveSpeed * dt));
         y = Math.max(95, Math.min(height - 45, y + dy / length * moveSpeed * dt));
@@ -225,17 +244,34 @@ public final class SurvivalGame {
             nextElite += ELITE_SECONDS;
             enemies.add(newEnemy(ELITE, 40 + random.nextDouble() * (width - 80), -30));
         }
+        if (elapsed >= nextBoss) {
+            nextBoss += BOSS_SECONDS;
+            enemies.add(newEnemy(BOSS, width / 2.0, -40));
+            bossesSpawned++; bossWarning = 3;
+        }
         for (Enemy enemy : enemies) {
-            enemy.y += enemy.speed * dt;
+            if (enemy.kind == BOSS) {
+                // Bosses descend to a hold line, then sweep side to side for the rest of the fight.
+                if (enemy.y < BOSS_HOLD_Y) enemy.y = Math.min(BOSS_HOLD_Y, enemy.y + enemy.speed * dt);
+                else {
+                    enemy.sweep += dt;
+                    enemy.x = width / 2.0 + (width / 2.0 - 60) * Math.sin(enemy.sweep * .5);
+                }
+            } else enemy.y += enemy.speed * dt;
             if (enemy.kind == RUSHER) {
                 // Rushers slide toward the player's column while they fall.
                 double gap = x - enemy.x;
                 enemy.x += Math.max(-1, Math.min(1, gap / 20)) * 70 * dt;
             }
-            boolean shoots = enemy.kind == SHOOTER || enemy.kind == ELITE;
+            boolean shoots = enemy.kind == SHOOTER || enemy.kind == ELITE || enemy.kind == BOSS;
             if (shoots && enemy.y > 80 && enemy.y < height - 100) {
                 enemy.fireClock -= dt;
-                if (enemy.fireClock <= 0) {
+                if (enemy.fireClock <= 0 && enemy.kind == BOSS) {
+                    // Five-way spread; below half health it fires faster.
+                    enemy.fireClock = enemy.hp < enemy.maxHp / 2 ? 1.4 : 2.0;
+                    for (int i = -2; i <= 2; i++)
+                        shots.add(new Shot(enemy.x, enemy.y + 20, i * 45, 150, 6 * enemy.power, true));
+                } else if (enemy.fireClock <= 0) {
                     boolean elite = enemy.kind == ELITE;
                     enemy.fireClock = elite ? 1.6 : 2.4;
                     shots.add(new Shot(enemy.x, enemy.y + 12, 0, 150, 10 * enemy.power, true));
@@ -254,8 +290,10 @@ public final class SurvivalGame {
                 hurt(shot.damage); removed = true;
             } else if (!removed && !shot.hostile) {
                 for (Enemy enemy : enemies) {
-                    if (enemy.hp > 0 && Math.abs(shot.x - enemy.x) < 14 + shot.width / 2.0
-                            && Math.abs(shot.y - enemy.y) < 12 + shot.height / 2.0) {
+                    // The boss is drawn much larger than other enemies, so its hit box is too.
+                    double halfW = enemy.kind == BOSS ? 36 : 14, halfH = enemy.kind == BOSS ? 24 : 12;
+                    if (enemy.hp > 0 && Math.abs(shot.x - enemy.x) < halfW + shot.width / 2.0
+                            && Math.abs(shot.y - enemy.y) < halfH + shot.height / 2.0) {
                         double hit = shot.damage * (critChance > 0 && random.nextDouble() < critChance ? 2 : 1);
                         double dealt = Math.min(enemy.hp, hit);
                         enemy.hp -= hit; heal(dealt * lifesteal); removed = true;
@@ -270,20 +308,30 @@ public final class SurvivalGame {
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy enemy = it.next();
             if (enemy.hp <= 0) {
+                if (enemy.kind == BOSS) bossKills++;
                 kills++; earned += (int) Math.max(1, Math.round(xpFor(enemy.kind) * enemy.power)); killScore += pointsFor(enemy.kind);
                 // Elites always drop a repair kit; everything else has a 12% chance.
-                if (enemy.kind == ELITE || random.nextDouble() < .12)
+                boolean big = enemy.kind == ELITE || enemy.kind == BOSS;
+                if (big || random.nextDouble() < .12)
                     repairs.add(new Repair(enemy.x, enemy.y));
                 // Elites always drop a special pickup too; others rarely.
-                if (enemy.kind == ELITE || random.nextDouble() < ITEM_DROP_CHANCE + dropBonus) {
+                if (big || random.nextDouble() < ITEM_DROP_CHANCE + dropBonus) {
                     ItemType[] types = ItemType.values();
                     pickups.add(new Pickup(enemy.x, enemy.y, types[random.nextInt(types.length)]));
+                    // A boss drops a second pickup, a little to the side.
+                    if (enemy.kind == BOSS)
+                        pickups.add(new Pickup(enemy.x + 24, enemy.y, types[random.nextInt(types.length)]));
                 }
                 if (enemy.kind == SPLITTER) {
                     spawned.add(newEnemy(MINI, enemy.x - 12, enemy.y));
                     spawned.add(newEnemy(MINI, enemy.x + 12, enemy.y));
                 }
                 it.remove();
+            } else if (enemy.kind == BOSS) {
+                // A boss never escapes; touching it hurts but does not remove it.
+                if (contactGrace <= 0 && Math.abs(enemy.x - x) < 40 && Math.abs(enemy.y - y) < 34) {
+                    hurt(18 * enemy.power); contactGrace = .6;
+                }
             } else if (enemy.y >= height - 28) {
                 hurt(12 * enemy.power); it.remove();
             } else if (Math.abs(enemy.x - x) < 25 && Math.abs(enemy.y - y) < 26) {
@@ -323,7 +371,7 @@ public final class SurvivalGame {
         case RAPID_FIRE: rapid = type.seconds; break;
         case BOMB:
             for (Enemy enemy : enemies) {
-                if (enemy.kind == ELITE) enemy.hp -= BOMB_ELITE_DAMAGE;
+                if (enemy.kind == ELITE || enemy.kind == BOSS) enemy.hp -= BOMB_ELITE_DAMAGE;
                 else enemy.hp = 0;
             }
             break;

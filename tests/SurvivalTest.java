@@ -28,7 +28,7 @@ public final class SurvivalTest {
     private static void select(SurvivalGame game, Upgrade target) {
         game.choose(game.choices().indexOf(target));
     }
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         for (ShipType type : ShipType.values()) {
             SurvivalGame ship = new SurvivalGame(448, 520, new Random(7), type);
             check(ship.shipType == type && ship.hp == 100, "Ship selection preserves Survival HP rules");
@@ -103,7 +103,8 @@ public final class SurvivalTest {
         check(game.choices().size() == 3, "Invalid selection cannot consume a level");
         game.choose(0);
         check(game.choices().isEmpty(), "Choice resumes combat");
-        game = game(); game.addExperience(100 + 135 + 170 + 4);
+        game = game(); game.addExperience(SurvivalGame.XP_BASE + (SurvivalGame.XP_BASE + SurvivalGame.XP_PER_LEVEL)
+                + (SurvivalGame.XP_BASE + 2 * SurvivalGame.XP_PER_LEVEL) + 4);
         game.choose(0); game.choose(0);
         check(game.level == 4 && game.xp == 4 && game.choices().size() == 3,
                 "Overflow XP preserves every pending level choice");
@@ -162,31 +163,31 @@ public final class SurvivalTest {
         clock = game.elapsed; game.update(.05, 1, 0); game.addExperience(100);
         check(game.elapsed == clock && game.level == 1, "Game over freezes combat and progression");
         // Enemy tiers and kinds.
-        game = game(); game.elapsed = 65;
-        check(game.tier() == 2, "Difficulty tier rises every 30 seconds");
+        game = game(); game.elapsed = 2 * SurvivalGame.TIER_SECONDS + 5;
+        check(game.tier() == 2, "Difficulty tier rises every 45 seconds");
         check(SurvivalGame.xpFor(SurvivalGame.GRUNT) == 6 && SurvivalGame.xpFor(SurvivalGame.ARMORED) == 10
                 && SurvivalGame.xpFor(SurvivalGame.ELITE) == 60, "Tougher enemies are worth more XP");
         game = game(); game.hp = game.maxHp = 100000;
-        boolean[] early = new boolean[7];
-        for (int i = 0; i < 300; i++) {
+        boolean[] early = new boolean[8];
+        for (int i = 0; i < 500; i++) {
             game.update(.05, 0, 0);
             for (Enemy e : game.enemies) early[e.kind] = true;
         }
-        check(game.elapsed < 20 && early[0] && early[1] && !early[2] && !early[3] && !early[4] && !early[5],
-                "Only basic enemies appear during the first 20 seconds");
-        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 100;
-        boolean[] late = new boolean[7];
+        check(game.elapsed < 30 && early[0] && early[1] && !early[2] && !early[3] && !early[4] && !early[5],
+                "Only basic enemies appear during the first 30 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 130;
+        boolean[] late = new boolean[8];
         for (int i = 0; i < 1000; i++) {
             game.update(.05, 0, 0);
             for (Enemy e : game.enemies) late[e.kind] = true;
         }
         check(late[SurvivalGame.RUSHER] && late[SurvivalGame.SPLITTER] && late[SurvivalGame.SHOOTER],
-                "Rushers and splitters join the run after 90 seconds");
-        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 59.97;
+                "Rushers and splitters join the run after 120 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = SurvivalGame.ELITE_SECONDS - .03;
         game.update(.05, 0, 0);
         boolean elite = false;
         for (Enemy e : game.enemies) elite |= e.kind == SurvivalGame.ELITE;
-        check(elite, "An elite arrives at 60 seconds");
+        check(elite, "An elite arrives at 75 seconds");
         game = game();
         Enemy rusher = new Enemy(game.x - 100, 150, SurvivalGame.RUSHER, 1000, 0);
         game.enemies.add(rusher);
@@ -276,9 +277,9 @@ public final class SurvivalTest {
         game.update(.016, 0, 0);
         check(game.pickups.size() == 1, "Elites always drop a special pickup");
         game = new SurvivalGame(448, 520, new Random(7));
-        check(game.xpRequired() == 100, "First level needs 100 XP");
-        game.addExperience(100);
-        check(game.xpRequired() == 135 && game.level == 2, "Each level needs 35 more XP");
+        check(game.xpRequired() == 120, "First level needs 120 XP");
+        game.addExperience(120);
+        check(game.xpRequired() == 165 && game.level == 2, "Each level needs 45 more XP");
         // Score: kill points plus 5 per full second survived.
         game = game();
         check(game.score() == 0, "A new run starts with no score");
@@ -302,15 +303,15 @@ public final class SurvivalTest {
         game.update(.05, 0, 0);
         check(game.score() == finalScore, "The score is frozen once the run is over");
         // Difficulty scaling over time.
-        check(SurvivalGame.spawnInterval(0) == .85, "Spawning starts at one enemy every 0.85 s");
+        check(SurvivalGame.spawnInterval(0) == .95, "Spawning starts at one enemy every 0.95 s");
         check(SurvivalGame.spawnInterval(120) < SurvivalGame.spawnInterval(60)
                 && SurvivalGame.spawnInterval(60) < SurvivalGame.spawnInterval(0), "Enemies spawn faster as time passes");
         check(SurvivalGame.spawnInterval(10000) == SurvivalGame.MIN_SPAWN_INTERVAL, "Spawn interval has a floor");
         game = game();
         check(game.strength() == 1, "Enemy strength starts at 1");
-        game.elapsed = 480;
-        check(game.strength() == 3, "Enemy strength grows by 1 every 240 seconds");
-        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 480;
+        game.elapsed = 2 * SurvivalGame.STRENGTH_SECONDS;
+        check(game.strength() == 3, "Enemy strength grows by 1 every 420 seconds");
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 2 * SurvivalGame.STRENGTH_SECONDS;
         double maxPower = 0;
         for (int i = 0; i < 100; i++) {
             game.update(.05, 0, 0);
@@ -408,6 +409,119 @@ public final class SurvivalTest {
             check(game.shots.size() < 1000 && game.enemies.size() < 1000, "Entities stay bounded");
         }
         check(game.elapsed > 180 && game.kills > 0 && game.level > 1, "Sustained run progresses");
+
+        // Boss enemies.
+        game = game(); game.hp = game.maxHp = 100000;
+        game.elapsed = SurvivalGame.BOSS_FIRST_SECONDS - .06;
+        game.update(.05, 0, 0);
+        check(!game.bossAlive() && game.bossesSpawned == 0, "No boss before the first boss time");
+        game.update(.05, 0, 0);
+        check(game.bossAlive() && game.bossesSpawned == 1 && game.bossWarning > 0, "A boss arrives at 2:00 with a warning");
+        Enemy boss = null;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.BOSS) boss = e;
+        double firstHp = boss.maxHp;
+        check(firstHp >= 600, "The boss is far tougher than an elite");
+        for (int i = 0; i < 400; i++) game.update(.05, 0, 0);
+        check(game.enemies.contains(boss) && boss.y == SurvivalGame.BOSS_HOLD_Y, "The boss stops at its hold line and never escapes");
+        boolean bossShot = false;
+        game.shots.clear();
+        for (int i = 0; i < 60 && !bossShot; i++) {
+            game.update(.05, 0, 0);
+            int spread = 0;
+            for (Shot shot : game.shots) if (shot.hostile && shot.y < 300) spread++;
+            bossShot = spread >= 5;
+        }
+        check(bossShot, "The boss fires a five-way spread");
+        double sweep = boss.x;
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        check(boss.x != sweep, "The boss sweeps side to side");
+        game.hp = 100000; game.y = boss.y = SurvivalGame.BOSS_HOLD_Y;
+        game.x = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin((boss.sweep + .016) * .5);
+        game.update(.016, 0, 0);
+        check(game.enemies.contains(boss) && game.hp < 100000, "Touching the boss hurts but does not remove it");
+        game = game(); game.elapsed = SurvivalGame.BOSS_FIRST_SECONDS + SurvivalGame.BOSS_SECONDS - .01;
+        game.hp = game.maxHp = 100000; game.update(.05, 0, 0); game.update(.05, 0, 0);
+        check(game.bossesSpawned == 2, "Another boss arrives every two minutes");
+        double secondHp = 0;
+        for (Enemy e : game.enemies) if (e.kind == SurvivalGame.BOSS) secondHp = Math.max(secondHp, e.maxHp);
+        check(secondHp > firstHp, "Later bosses have more health");
+        game = game(); game.hp = game.maxHp = 100000;
+        double bossX = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin(.016 * .5);
+        Enemy bossTarget = new Enemy(bossX, 200, SurvivalGame.BOSS, 100, 0);
+        game.enemies.add(bossTarget);
+        game.pickups.clear();
+        game.shots.add(new Shot(bossX, 200, 0, 0, 1000, false));
+        int scoreBefore = game.killScore;
+        game.update(.016, 0, 0);
+        check(game.bossKills == 1 && game.kills == 1 && game.killScore - scoreBefore == 500,
+                "Killing a boss counts it and is worth 500 points");
+        check(game.pickups.size() == 2 && game.repairs.size() == 1, "A boss drops two pickups and a repair kit");
+        check(game.xp + (game.level - 1) * SurvivalGame.XP_BASE >= 200 || game.level > 1, "A boss grants a large amount of XP");
+        game = game(); game.hp = game.maxHp = 100000;
+        Enemy tough = new Enemy(60, 200, SurvivalGame.BOSS, 500, 0);
+        game.enemies.add(tough);
+        game.pickups.add(new SurvivalGame.Pickup(game.x, game.y, SurvivalGame.ItemType.BOMB));
+        game.update(.016, 0, 0);
+        check(tough.hp == 500 - SurvivalGame.BOMB_ELITE_DAMAGE, "A bomb hurts a boss instead of destroying it");
+
+
+        // Boss sweep clock and hit box.
+        game = game(); game.hp = game.maxHp = 100000; game.elapsed = 500;
+        Enemy lateBoss = new Enemy(game.width / 2.0, SurvivalGame.BOSS_HOLD_Y, SurvivalGame.BOSS, 100000, 40);
+        game.enemies.add(lateBoss);
+        game.update(.05, 0, 0);
+        check(Math.abs(lateBoss.x - game.width / 2.0) < 10, "A boss starts sweeping from the center, whatever the run time");
+        for (int i = 0; i < 40; i++) game.update(.05, 0, 0);
+        Enemy second = new Enemy(game.width / 2.0, SurvivalGame.BOSS_HOLD_Y, SurvivalGame.BOSS, 100000, 40);
+        game.enemies.add(second);
+        for (int i = 0; i < 10; i++) game.update(.05, 0, 0);
+        check(Math.abs(lateBoss.x - second.x) > 20, "Two bosses sweep out of step instead of overlapping");
+        game = game(); game.hp = game.maxHp = 100000;
+        Enemy wide = new Enemy(game.width / 2.0, 200, SurvivalGame.BOSS, 100000, 0);
+        game.enemies.add(wide);
+        double wingX = game.width / 2.0 + (game.width / 2.0 - 60) * Math.sin(.016 * .5) + 33;
+        game.shots.add(new Shot(wingX, 200, 0, 0, 10, false));
+        game.update(.016, 0, 0);
+        check(wide.hp == 100000 - 10, "Shots hitting the boss's wing connect");
+        game = game();
+        Enemy grunt = new Enemy(game.width / 2.0, 200, SurvivalGame.GRUNT, 100, 0);
+        game.enemies.add(grunt);
+        game.shots.add(new Shot(game.width / 2.0 + 33, 200, 0, 0, 10, false));
+        game.update(.016, 0, 0);
+        check(grunt.hp == 100, "Other enemies keep their small hit box");
+        // Easier pacing for longer runs.
+        check(SurvivalGame.spawnInterval(120) > .7, "Spawning stays relaxed through the first two minutes");
+        game = game(); game.elapsed = 240;
+        check(game.strength() < 1.7, "Enemies are still under 1.7x power at four minutes");
+        check(SurvivalGame.XP_BASE == 120 && SurvivalGame.XP_PER_LEVEL == 45, "Level-ups need more XP so upgrades come at a steady pace");
+
+        // Local ranking.
+        java.io.File temp = java.io.File.createTempFile("survival-ranking", ".txt");
+        try {
+            temp.delete();
+            engine.SurvivalRanking ranking = new engine.SurvivalRanking(temp);
+            check(ranking.entries().isEmpty(), "A missing ranking file gives an empty ranking");
+            check(ranking.record(500, 90, 3) == 0, "The first run takes first place");
+            check(ranking.record(900, 150, 5) == 0 && ranking.record(700, 120, 4) == 1, "Runs are ordered by score");
+            check(ranking.record(700, 100, 2) == 2, "A tied score ranks below the earlier run");
+            check(ranking.entries().get(1).seconds == 120 && ranking.entries().get(2).seconds == 100, "Tied runs keep their order");
+            engine.SurvivalRanking reloaded = new engine.SurvivalRanking(temp);
+            check(reloaded.entries().size() == 4 && reloaded.entries().get(0).score == 900
+                    && reloaded.entries().get(0).seconds == 150 && reloaded.entries().get(0).level == 5,
+                    "The ranking is saved and reloaded from the file");
+            for (int i = 0; i < 20; i++) ranking.record(1000 + i, 60, 2);
+            check(ranking.entries().size() == engine.SurvivalRanking.MAX_ENTRIES, "The ranking keeps only the best ten runs");
+            check(ranking.record(1, 5, 1) == -1 && ranking.entries().size() == engine.SurvivalRanking.MAX_ENTRIES,
+                    "A run that does not place returns -1 and is not stored");
+            boolean sorted = true;
+            for (int i = 1; i < ranking.entries().size(); i++)
+                sorted &= ranking.entries().get(i - 1).score >= ranking.entries().get(i).score;
+            check(sorted, "The ranking stays sorted by score");
+            java.nio.file.Files.write(temp.toPath(), java.util.Arrays.asList("300,60,2", "oops", "5,6", "-4,1,1", "800,200,6"));
+            reloaded = new engine.SurvivalRanking(temp);
+            check(reloaded.entries().size() == 2 && reloaded.entries().get(0).score == 800,
+                    "Damaged lines are skipped when loading");
+        } finally { temp.delete(); }
         System.out.println("SurvivalTest: " + checks + " checks passed");
     }
 }
